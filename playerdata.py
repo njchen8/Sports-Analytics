@@ -1,84 +1,87 @@
-import time
-import sqlite3
+import requests
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+import sqlite3
 
-# ✅ Configure Selenium WebDriver (Visible Mode)
-CHROMEDRIVER_PATH = r"C:\Users\firef\OneDrive\Desktop\Sports Gambling\Sports Model\chromedriver-win64\chromedriver-win64\chromedriver.exe"
-chrome_options = Options()
-chrome_options.add_argument("--start-maximized")  # Open in full-screen mode
-chrome_options.add_experimental_option("detach", True)  # Keep window open after execution
+# ✅ Correct NBA API URL
+NBA_API_URL = "https://stats.nba.com/stats/leaguedashplayerstats"
 
-service = Service(CHROMEDRIVER_PATH)
-driver = webdriver.Chrome(service=service, options=chrome_options)
+# ✅ Request Headers (NBA.com requires these headers)
+HEADERS = {
+    "Host": "stats.nba.com",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://www.nba.com/stats/players/traditional",
+    "x-nba-stats-origin": "stats",
+    "x-nba-stats-token": "true"
+}
 
-# ✅ NBA Stats URL
-URL = "https://www.nba.com/stats/players/traditional?PerMode=PerGame&sort=PTS&dir=-1"
+# ✅ Query Parameters (Modify Season if needed)
+PARAMS = {
+    "College": "",
+    "Conference": "",
+    "Country": "",
+    "DateFrom": "",
+    "DateTo": "",
+    "Division": "",
+    "DraftPick": "",
+    "DraftYear": "",
+    "GameScope": "",
+    "GameSegment": "",
+    "Height": "",
+    "ISTRound": "",
+    "LastNGames": "0",
+    "LeagueID": "00",
+    "Location": "",
+    "MeasureType": "Base",
+    "Month": "0",
+    "OpponentTeamID": "0",
+    "Outcome": "",
+    "PORound": "0",
+    "PaceAdjust": "N",
+    "PerMode": "PerGame",
+    "Period": "0",
+    "PlayerExperience": "",
+    "PlayerPosition": "",
+    "PlusMinus": "N",
+    "Rank": "N",
+    "Season": "2023-24",  # Change this for the new season
+    "SeasonSegment": "",
+    "SeasonType": "Regular Season",
+    "ShotClockRange": "",
+    "StarterBench": "",
+    "TeamID": "0",
+    "VsConference": "",
+    "VsDivision": "",
+    "Weight": ""
+}
 
-# ✅ Open the webpage (Browser remains open)
-driver.get(URL)
+# ✅ Fetch Data from API
+response = requests.get(NBA_API_URL, headers=HEADERS, params=PARAMS)
 
-# ✅ Wait until the player stats table loads
-WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "Crom_table__p1iZz")))
-time.sleep(5)  # Allow time for JavaScript to load all data
+# ✅ Check if API request was successful
+if response.status_code == 200:
+    data = response.json()
 
-# ✅ Extract Table Data
-table = driver.find_element(By.CLASS_NAME, "Crom_table__p1iZz")
-rows = table.find_elements(By.TAG_NAME, "tr")
+    # ✅ Extract Headers (Column Names)
+    headers = data["resultSets"][0]["headers"]
 
-# ✅ Extract column headers
-headers = [header.text for header in rows[0].find_elements(By.TAG_NAME, "th")]
+    # ✅ Extract Player Stats Data
+    rows = data["resultSets"][0]["rowSet"]
 
-# ✅ Extract player data
-player_data = []
-for row in rows[1:]:  # Skip header row
-    cols = row.find_elements(By.TAG_NAME, "td")
-    player_stats = [col.text for col in cols]
-    if player_stats:
-        player_data.append(player_stats)
+    # ✅ Convert to DataFrame
+    df = pd.DataFrame(rows, columns=headers)
 
-# ✅ Convert to DataFrame
-df = pd.DataFrame(player_data, columns=headers)
-print(df.head())
+    # ✅ Save Data to CSV
+    df.to_csv("nba_player_stats.csv", index=False)
+    print("✅ NBA Player Stats saved to 'nba_player_stats.csv'!")
 
-# ✅ Store Data in SQLite Database
-DB_NAME = "nba_player_stats.db"
+    # ✅ Store Data in SQLite Database
+    DB_NAME = "nba_player_stats.db"
+    conn = sqlite3.connect(DB_NAME)
+    df.to_sql("players", conn, if_exists="replace", index=False)
+    conn.close()
 
-# Connect to database (or create if not exists)
-conn = sqlite3.connect(DB_NAME)
-cursor = conn.cursor()
+    print(f"✅ NBA player stats saved to {DB_NAME}")
 
-# Create Table if not exists
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS players (
-        Rank INTEGER,
-        Player TEXT,
-        Team TEXT,
-        GP INTEGER,
-        MIN FLOAT,
-        PTS FLOAT,
-        REB FLOAT,
-        AST FLOAT,
-        STL FLOAT,
-        BLK FLOAT,
-        TOV FLOAT,
-        FG_PCT FLOAT,
-        FT_PCT FLOAT,
-        THREE_PCT FLOAT
-    )
-""")
-
-# ✅ Insert Data
-df.to_sql("players", conn, if_exists="replace", index=False)
-
-# ✅ Close Connection
-conn.commit()
-conn.close()
-
-print(f"✅ NBA player stats saved to {DB_NAME}")
-print("🚀 Keep the browser open for debugging!")
+else:
+    print(f"❌ Failed to fetch data. HTTP Status Code: {response.status_code}")
