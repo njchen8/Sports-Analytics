@@ -1,0 +1,70 @@
+﻿Player,Stat Type,Prop Line,Higher Payout,Lower Payout
+Scottie Barnes,Points,20.5,1,1
+Scottie Barnes,Pts + Rebs + Asts,34.5,0.94x,1.05x
+Scottie Barnes,Assists,5.5,0.89x,1.11x
+Scottie Barnes,1Q Points,4.5,1,1
+Immanuel Quickley,Points,15.5,0.94x,1.05x
+Immanuel Quickley,Pts + Rebs + Asts,25.5,0.92x,1.07x
+Immanuel Quickley,Assists,5.5,0.92x,1.07x
+Immanuel Quickley,Rebounds,3.5,0.94x,1.04x
+Joel Embiid,Points,27.5,1,1
+Joel Embiid,Pts + Rebs + Asts,42.5,1,1
+Joel Embiid,1Q Points,5.5,1,1
+Joel Embiid,Assists,4.5,1,1
+Gradey Dick,Points,13.5,1,1
+Gradey Dick,Pts + Rebs + Asts,19.5,1,1
+Gradey Dick,1Q Points,3.5,1,1
+Gradey Dick,Assists,1.5,1.05x,0.94x
+Kevin Durant,Points,26.5,1,1
+Kevin Durant,Pts + Rebs + Asts,36.5,1,1
+Kevin Durant,1Q Points,8.5,1.06x,0.93x
+Kevin Durant,Rebounds,5.5,1,1
+Devin Booker,Points,28.5,1,1
+Devin Booker,Pts + Rebs + Asts,38.5,1,1
+Devin Booker,Assists,5.5,0.88x,1.13x
+Devin Booker,1Q Points,5.5,0.92x,1.06x
+Zach Edey,Points,6.5,1,1
+Zach Edey,Pts + Rebs + Asts,14.5,1,1
+Zach Edey,Assists,0.5,0.87x,1.12x
+Zach Edey,Rebounds,6.5,1,1
+GG Jackson,Points,9.5,1,1
+GG Jackson,Pts + Rebs + Asts,14.5,1,1
+GG Jackson,1Q Points,2.5,1,1
+GG Jackson,Rebounds,3.5,1.18x,0.84x
+Luke Kennard,Points,6.5,1.09x,0.91x
+Luke Kennard,Pts + Rebs + Asts,11.5,1,1
+Luke Kennard,1Q Points,0.5,1.18x,0.84x
+Luke Kennard,Rebounds,2.5,1.12x,0.87x
+Brandon Clarke,Points,7.5,1,1
+Brandon Clarke,Pts + Rebs + Asts,13.5,1,1
+Brandon Clarke,Assists,0.5,0.85x,1.16x
+Brandon Clarke,1Q Points,1.5,0.91x,1.08x
+Jaylen Wells,Points,6.5,1,1
+Jaylen Wells,Pts + Rebs + Asts,10.5,1,1
+Jaylen Wells,1Q Points,2.5,1,1
+Jaylen Wells,Rebounds,2.5,1.13x,0.88x
+Ja Morant,Points,"21.5
+0.5",1,1
+Ja Morant,Points,20.5,1,1
+Ja Morant,Pts + Rebs + Asts,31.5,1,1
+Ja Morant,Assists,6.5,0.93x,1.06x
+Desmond Bane,Points,20.5,1,1
+Desmond Bane,Pts + Rebs + Asts,30.5,1,1
+Desmond Bane,1Q Points,4.5,0.91x,1.08x
+Desmond Bane,Assists,5.5,1.07x,0.92x
+Jaren Jackson Jr.,Points,21.5,1,1
+Jaren Jackson Jr.,Pts + Rebs + Asts,29.5,1,1
+Jaren Jackson Jr.,Assists,2.5,1.09x,0.91x
+Jaren Jackson Jr.,1Q Points,4.5,1.07x,0.92x
+Tyus Jones,Points,11.5,1,1
+Tyus Jones,Pts + Rebs + Asts,19.5,1,1
+Tyus Jones,Assists,5.5,0.89x,1.12x
+Tyus Jones,1Q Points,2.5,1,1
+Santi Aldama,Points,9.5,1,1
+Santi Aldama,Pts + Rebs + Asts,17.5,1,1
+Santi Aldama,Assists,1.5,1,1
+Santi Aldama,1Q Points,2.5,1,1
+Nick Richards,Points,8.5,1,1
+Nick Richards,Pts + Rebs + Asts,17.5,1,1
+Nick Richards,Rebounds,8.5,1,1
+Nick Richards,1Q Points,2.5,1.14x,0.86x

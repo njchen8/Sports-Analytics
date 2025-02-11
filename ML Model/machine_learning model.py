@@ -3,6 +3,7 @@ import numpy as np
 import joblib
 import os
 import itertools
+import requests
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import multivariate_normal
@@ -10,8 +11,8 @@ from sklearn.preprocessing import StandardScaler
 
 # File paths
 data_file = "nba_players_game_logs_5_seasons.csv"
-model_file = "team_joint_prob_model.pkl"
-scaler_file = "team_scaler.pkl"
+model_file = "optimized_team_joint_prob_model.pkl"
+scaler_file = "optimized_team_scaler.pkl"
 
 print("Loading dataset...")
 df = pd.read_csv(data_file)
@@ -38,7 +39,7 @@ else:
 
 # Train or load model
 if os.path.exists(model_file):
-    print("Loading pre-trained team joint probability model...")
+    print("Loading pre-trained optimized probability model...")
     joint_model = joblib.load(model_file)
 else:
     print("Fitting Multivariate Gaussian Model...")
@@ -49,63 +50,98 @@ else:
     joblib.dump(joint_model, model_file)
     print("Model training complete and saved.")
 
-# Function to compute probability for any given parlay
-def compute_parlay_probability(parlay_bets):
+# Function to compute weighted probability based on game type
+def get_weighted_probability(player, related_player, stat, value, pick, game_type, is_teammate):
     """
-    Computes the probability of hitting a parlay using conditional probability.
-    
-    :param parlay_bets: List of bets in format:
-        [{"player": "LeBron James", "stat": "PTS", "value": 25.5, "pick": "over"}, ...]
-    :return: Final parlay probability
+    Computes probability based on game type:
+    - **Same Team:** Joint Distribution (Strong Correlation)
+    - **Same Game:** Joint Distribution (Weaker Correlation)
+    - **Different Matches:** Independent Distribution (No Correlation)
     """
+    print(f"\n📊 Checking probability for {player} (vs/with {related_player}) - {game_type}...")
+
+    # General probability from joint model
     num_samples = 5000
     samples_scaled = joint_model.rvs(size=num_samples)
     samples_original = scaler.inverse_transform(samples_scaled)
 
-    # Compute probabilities based on given conditions
+    stat_index = 0 if stat == "PTS" else 1 if stat == "REB" else 2
+    if pick == "over":
+        general_prob = np.mean(samples_original[:, stat_index] >= value)
+    else:
+        general_prob = np.mean(samples_original[:, stat_index] <= value)
+
+    if game_type == "different_match":
+        print(f"🎯 Independent Probability: {general_prob:.2%}")
+        return general_prob
+
+    # Compute same-team adjustments
+    player_games = df_selected[df_selected["PLAYER_NAME"] == player]
+    related_games = df_selected[df_selected["PLAYER_NAME"] == related_player] if related_player else None
+    same_games = pd.merge(player_games, related_games, on="MATCHUP", suffixes=("_player", "_related")) if related_games is not None else None
+
+    same_team_prob = None
+    if game_type in ["same_team", "same_game"] and same_games is not None and not same_games.empty:
+        stat_col = f"{stat}_player"
+        past_values = same_games[stat_col]
+        if pick == "over":
+            same_team_prob = np.mean(past_values >= value)
+        else:
+            same_team_prob = np.mean(past_values <= value)
+
+    # Weighted combination based on game type
+    weight_team = 0.70 if game_type == "same_team" else 0.50  # More weight for same-team
+    weight_general = 1 - weight_team
+
+    final_prob = (
+        (same_team_prob if same_team_prob is not None else general_prob) * weight_team +
+        general_prob * weight_general
+    )
+
+    print(f"📊 P({player} {stat} {pick} {value}) weighted = {final_prob:.2%}")
+    return final_prob
+
+# Function to compute probability for a parlay
+def compute_parlay_probability(parlay_bets):
+    """
+    Computes the probability of hitting a parlay using weighted probabilities.
+    """
     total_prob = 1
     for bet in parlay_bets:
-        player = bet["player"]
-        stat = bet["stat"]
-        value = bet["value"]
-        pick = bet["pick"]
-
-        player_data = df_selected[df_selected["PLAYER_NAME"] == player]
-        if player_data.empty:
-            continue
-
-        stat_index = 0 if stat == "PTS" else 1 if stat == "REB" else 2
-        if pick == "over":
-            prob = np.mean(samples_original[:, stat_index] >= value)
-        else:
-            prob = np.mean(samples_original[:, stat_index] <= value)
-
+        prob = get_weighted_probability(
+            bet["player"], bet["related_player"], bet["stat"], bet["value"], bet["pick"], bet["game_type"], bet["is_teammate"]
+        )
         total_prob *= prob
 
     return total_prob
 
-# Function to find the best parlay based on user inputted possible bets
-def find_best_parlay(all_possible_bets, underdog_odds):
+# Function to compute total parlay odds
+def compute_parlay_odds(parlay_bets):
     """
-    Finds the best +EV parlay using all possible bets provided.
-    
-    :param all_possible_bets: List of all individual bets.
-    :param underdog_odds: Decimal odds for the parlay bet.
+    Computes the total odds for a given parlay based on individual leg odds.
+    """
+    decimal_odds = [bet["odds"] for bet in parlay_bets]
+    total_odds = np.prod(decimal_odds)
+    return total_odds
+
+# Function to find the best parlay using all possible bets
+def find_best_parlay(all_possible_bets):
+    """
+    Finds the best +EV parlay using weighted probabilities and individual leg odds.
     """
     best_ev = -float("inf")
     best_parlay = None
     best_prob = 0
+    best_odds = 0
 
-    # Generate all possible parlay combinations (1 to 4 legs recommended for realism)
-    for r in range(2, min(5, len(all_possible_bets) + 1)):  # Parlays from 2 to 4 legs
+    # Generate all valid parlay combinations (2 to 4 legs)
+    for r in range(2, min(5, len(all_possible_bets) + 1)):
         for parlay_bets in itertools.combinations(all_possible_bets, r):
             parlay_prob = compute_parlay_probability(parlay_bets)
-
-            # Convert sportsbook odds to implied probability
-            implied_prob = 1 / underdog_odds
+            parlay_odds = compute_parlay_odds(parlay_bets)
 
             # Compute Expected Value (EV)
-            payout = (underdog_odds - 1) * 100
+            payout = (parlay_odds - 1) * 100
             risk = 100
             ev = (parlay_prob * payout) - ((1 - parlay_prob) * risk)
 
@@ -114,37 +150,7 @@ def find_best_parlay(all_possible_bets, underdog_odds):
                 best_ev = ev
                 best_parlay = parlay_bets
                 best_prob = parlay_prob
+                best_odds = parlay_odds
 
-    # Print the best parlay found
-    print("\n🔥 **Best Parlay Found:**")
-    for bet in best_parlay:
-        print(f"{bet['player']} {bet['stat']} {bet['pick']} {bet['value']}")
-
-    print(f"\n📊 **Parlay Probability: {best_prob:.2%}**")
-    print(f"🎰 **Sportsbook Implied Probability: {1/underdog_odds:.2%}**")
-    print(f"💰 **Expected Value (EV): ${best_ev:.2f}**")
-
-    if best_ev > 0:
-        print("✅ **+EV Bet! Consider placing this wager.**")
-    else:
-        print("❌ **-EV Bet. Avoid this bet.**")
-
+    print(f"\n🔥 Best Parlay Found:\n📊 **Probability: {best_prob:.2%}** 🎰 **Odds: {best_odds:.2f}** 💰 **EV: ${best_ev:.2f}**")
     return best_parlay, best_ev
-
-# **Example Usage - Input All Possible Bets**
-all_possible_bets = [
-    {"player": "Thanasis Antetokounmpo", "stat": "PTS", "value": 10, "pick": "over"},
-    {"player": "Thanasis Antetokounmpo", "stat": "REB", "value": 8, "pick": "under"},
-    {"player": "Thanasis Antetokounmpo", "stat": "AST", "value": 5, "pick": "over"},
-    {"player": "Ryan Arcidiacono", "stat": "AST", "value": 8, "pick": "under"},
-    {"player": "Ryan Arcidiacono", "stat": "PTS", "value": 5, "pick": "over"},
-    {"player": "Ryan Arcidiacono", "stat": "REB", "value": 6, "pick": "under"},
-    {"player": "Udoka Azubuike", "stat": "PTS", "value": 2, "pick": "over"},
-    {"player": "Udoka Azubuike", "stat": "REB", "value": 3, "pick": "under"},
-]
-
-# Assume Underdog odds for this parlay is +750 (8.5 in decimal odds)
-underdog_odds = 8.5
-
-# Find the best possible parlay
-find_best_parlay(all_possible_bets, underdog_odds)
