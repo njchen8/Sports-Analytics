@@ -5,23 +5,44 @@ import os
 import itertools
 import requests
 import matplotlib.pyplot as plt
-import seaborn as sns
 from scipy.stats import multivariate_normal
 from sklearn.preprocessing import StandardScaler
+import re
 
 # File paths
-data_file = "nba_players_game_logs_5_seasons.csv"
+player_stats_file = "nba_player_stats.csv"
+parlay_file = "underdog_player_props.csv"
 model_file = "optimized_team_joint_prob_model.pkl"
 scaler_file = "optimized_team_scaler.pkl"
 
-print("Loading dataset...")
-df = pd.read_csv(data_file)
+print("Loading player stats dataset...")
+df_stats = pd.read_csv(player_stats_file)
 
 # Select relevant columns
-selected_columns = ["PLAYER_ID", "PLAYER_NAME", "TEAM_ABBREVIATION", "MATCHUP", "PTS", "REB", "AST"]
-df_selected = df[selected_columns]
+selected_columns = ["PLAYER_NAME", "TEAM_ABBREVIATION", "PTS", "REB", "AST"]
+df_selected = df_stats[selected_columns]
 
-# Extract numerical features
+# Load parlay legs dataset
+print("Loading player props dataset...")
+parlay_df = pd.read_csv(parlay_file)
+
+# Clean payout columns
+parlay_df["Higher Payout"] = parlay_df["Higher Payout"].astype(str).str.replace("x", "").astype(float)
+parlay_df["Lower Payout"] = parlay_df["Lower Payout"].astype(str).str.replace("x", "").astype(float)
+
+# Function to clean and extract the first valid float from "Prop Line"
+def extract_first_float(value):
+    if isinstance(value, str):  
+        value = value.replace("\n", "").strip()  
+        match = re.search(r"\d+(\.\d+)?", value)  
+        if match:
+            return float(match.group())  
+    return None  
+
+parlay_df["Prop Line"] = parlay_df["Prop Line"].apply(extract_first_float)
+parlay_df = parlay_df.dropna(subset=["Prop Line"])
+
+# Extract numerical features for ML model
 data = df_selected[["PTS", "REB", "AST"]].values
 
 # Standardize data
@@ -50,107 +71,90 @@ else:
     joblib.dump(joint_model, model_file)
     print("Model training complete and saved.")
 
-# Function to compute weighted probability based on game type
-def get_weighted_probability(player, related_player, stat, value, pick, game_type, is_teammate):
-    """
-    Computes probability based on game type:
-    - **Same Team:** Joint Distribution (Strong Correlation)
-    - **Same Game:** Joint Distribution (Weaker Correlation)
-    - **Different Matches:** Independent Distribution (No Correlation)
-    """
-    print(f"\n📊 Checking probability for {player} (vs/with {related_player}) - {game_type}...")
+# Function to compute probability for a specific player prop
+def get_player_probability(player, stat, value, pick):
+    player_data = df_selected[df_selected["PLAYER_NAME"] == player]
+    
+    # Automatically remove bets with missing player data
+    if player_data.empty:
+        return None  
 
-    # General probability from joint model
+    stat_index = 0 if stat == "Points" else 1 if stat == "Rebounds" else 2
     num_samples = 5000
     samples_scaled = joint_model.rvs(size=num_samples)
     samples_original = scaler.inverse_transform(samples_scaled)
 
-    stat_index = 0 if stat == "PTS" else 1 if stat == "REB" else 2
     if pick == "over":
-        general_prob = np.mean(samples_original[:, stat_index] >= value)
+        prob = np.mean(samples_original[:, stat_index] >= value)
     else:
-        general_prob = np.mean(samples_original[:, stat_index] <= value)
+        prob = np.mean(samples_original[:, stat_index] <= value)
 
-    if game_type == "different_match":
-        print(f"🎯 Independent Probability: {general_prob:.2%}")
-        return general_prob
+    return prob
 
-    # Compute same-team adjustments
-    player_games = df_selected[df_selected["PLAYER_NAME"] == player]
-    related_games = df_selected[df_selected["PLAYER_NAME"] == related_player] if related_player else None
-    same_games = pd.merge(player_games, related_games, on="MATCHUP", suffixes=("_player", "_related")) if related_games is not None else None
+# Function to filter bets before computation
+def filter_bets():
+    filtered_bets = []
+    for _, row in parlay_df.iterrows():
+        probability = get_player_probability(row["Player"], row["Stat Type"], row["Prop Line"], "over")
 
-    same_team_prob = None
-    if game_type in ["same_team", "same_game"] and same_games is not None and not same_games.empty:
-        stat_col = f"{stat}_player"
-        past_values = same_games[stat_col]
-        if pick == "over":
-            same_team_prob = np.mean(past_values >= value)
-        else:
-            same_team_prob = np.mean(past_values <= value)
+        # Automatically discard bets with missing probability (i.e., missing player data)
+        if probability is None:
+            continue  
 
-    # Weighted combination based on game type
-    weight_team = 0.70 if game_type == "same_team" else 0.50  # More weight for same-team
-    weight_general = 1 - weight_team
+        ev = (probability * (row["Higher Payout"] - 1) * 100) - ((1 - probability) * 100)
+        
+        # Keep bets with probability between 0.50 and 0.90
+        if 0.50 <= probability <= 0.90 and ev > 0:
+            filtered_bets.append({
+                "Player": row["Player"],
+                "Stat Type": row["Stat Type"],
+                "Prop Line": row["Prop Line"],
+                "Pick": "over",
+                "Odds": row["Higher Payout"],
+                "Probability": probability,
+                "EV": ev
+            })
 
-    final_prob = (
-        (same_team_prob if same_team_prob is not None else general_prob) * weight_team +
-        general_prob * weight_general
-    )
+    # Ensure we retain at least 15 bets
+    return filtered_bets[:15] if len(filtered_bets) > 15 else filtered_bets
 
-    print(f"📊 P({player} {stat} {pick} {value}) weighted = {final_prob:.2%}")
-    return final_prob
+# Function to identify the best +EV parlay with pruning
+def find_best_parlay():
+    all_possible_bets = filter_bets()
 
-# Function to compute probability for a parlay
-def compute_parlay_probability(parlay_bets):
-    """
-    Computes the probability of hitting a parlay using weighted probabilities.
-    """
-    total_prob = 1
-    for bet in parlay_bets:
-        prob = get_weighted_probability(
-            bet["player"], bet["related_player"], bet["stat"], bet["value"], bet["pick"], bet["game_type"], bet["is_teammate"]
-        )
-        total_prob *= prob
+    if not all_possible_bets:
+        print("❌ No valid bets found. Exiting...")
+        return None, None
 
-    return total_prob
-
-# Function to compute total parlay odds
-def compute_parlay_odds(parlay_bets):
-    """
-    Computes the total odds for a given parlay based on individual leg odds.
-    """
-    decimal_odds = [bet["odds"] for bet in parlay_bets]
-    total_odds = np.prod(decimal_odds)
-    return total_odds
-
-# Function to find the best parlay using all possible bets
-def find_best_parlay(all_possible_bets):
-    """
-    Finds the best +EV parlay using weighted probabilities and individual leg odds.
-    """
     best_ev = -float("inf")
     best_parlay = None
-    best_prob = 0
-    best_odds = 0
 
-    # Generate all valid parlay combinations (2 to 4 legs)
-    for r in range(2, min(5, len(all_possible_bets) + 1)):
-        for parlay_bets in itertools.combinations(all_possible_bets, r):
-            parlay_prob = compute_parlay_probability(parlay_bets)
-            parlay_odds = compute_parlay_odds(parlay_bets)
+    # Stage 1: Compute 2-leg parlays, keep top 10
+    two_leg_parlays = []
+    for parlay_bets in itertools.combinations(all_possible_bets, 2):
+        ev = sum(bet["EV"] for bet in parlay_bets)  
+        two_leg_parlays.append((parlay_bets, ev))
+    two_leg_parlays = sorted(two_leg_parlays, key=lambda x: x[1], reverse=True)[:10]  
 
-            # Compute Expected Value (EV)
-            payout = (parlay_odds - 1) * 100
-            risk = 100
-            ev = (parlay_prob * payout) - ((1 - parlay_prob) * risk)
+    # Stage 2: Compute 3-leg parlays from top 10, keep top 5
+    three_leg_parlays = []
+    for parlay_bets, _ in two_leg_parlays:
+        for new_bet in all_possible_bets:
+            if new_bet not in parlay_bets:
+                new_parlay = parlay_bets + (new_bet,)
+                ev = sum(bet["EV"] for bet in new_parlay)
+                three_leg_parlays.append((new_parlay, ev))
+    three_leg_parlays = sorted(three_leg_parlays, key=lambda x: x[1], reverse=True)[:5]  
 
-            # Track best +EV parlay
-            if ev > best_ev:
-                best_ev = ev
-                best_parlay = parlay_bets
-                best_prob = parlay_prob
-                best_odds = parlay_odds
+    # If no valid 3-leg parlays exist, return a message instead of crashing
+    if not three_leg_parlays:
+        print("❌ No valid 3-leg parlays found. Returning the best 2-leg parlay instead.")
+        return two_leg_parlays[0] if two_leg_parlays else (None, None)
 
-    print(f"\n🔥 Best Parlay Found:\n📊 **Probability: {best_prob:.2%}** 🎰 **Odds: {best_odds:.2f}** 💰 **EV: ${best_ev:.2f}**")
+    best_parlay, best_ev = max(three_leg_parlays, key=lambda x: x[1])
+
+    print(f"\n🔥 Best Parlay Found:\n🎰 **EV: ${best_ev:.2f}**")
     return best_parlay, best_ev
+
+# Run optimization
+best_parlay, best_ev = find_best_parlay()
