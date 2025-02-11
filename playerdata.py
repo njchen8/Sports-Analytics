@@ -1,11 +1,10 @@
 import requests
 import pandas as pd
-import sqlite3
 
-# ✅ Correct NBA API URL
+#  Correct NBA API URL
 NBA_API_URL = "https://stats.nba.com/stats/leaguedashplayerstats"
 
-# ✅ Request Headers (NBA.com requires these headers)
+#  Request Headers (NBA.com requires these headers)
 HEADERS = {
     "Host": "stats.nba.com",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -15,7 +14,7 @@ HEADERS = {
     "x-nba-stats-token": "true"
 }
 
-# ✅ Query Parameters (Modify Season if needed)
+#  Query Parameters (Modify Season if needed)
 PARAMS = {
     "College": "",
     "Conference": "",
@@ -55,33 +54,25 @@ PARAMS = {
     "Weight": ""
 }
 
-# ✅ Fetch Data from API
+#  Fetch Data from API
 response = requests.get(NBA_API_URL, headers=HEADERS, params=PARAMS)
 
-# ✅ Check if API request was successful
+#  Check if API request was successful
 if response.status_code == 200:
     data = response.json()
 
-    # ✅ Extract Headers (Column Names)
+    #  Extract Headers (Column Names)
     headers = data["resultSets"][0]["headers"]
 
-    # ✅ Extract Player Stats Data
+    #  Extract Player Stats Data
     rows = data["resultSets"][0]["rowSet"]
 
-    # ✅ Convert to DataFrame
+    #  Convert to DataFrame
     df = pd.DataFrame(rows, columns=headers)
 
-    # ✅ Save Data to CSV
+    #  Save Data to CSV
     df.to_csv("nba_player_stats.csv", index=False)
-    print("✅ NBA Player Stats saved to 'nba_player_stats.csv'!")
-
-    # ✅ Store Data in SQLite Database
-    DB_NAME = "nba_player_stats.db"
-    conn = sqlite3.connect(DB_NAME)
-    df.to_sql("players", conn, if_exists="replace", index=False)
-    conn.close()
-
-    print(f"✅ NBA player stats saved to {DB_NAME}")
+    print(" NBA Player Stats saved to 'nba_player_stats.csv'!")
 
 else:
     print(f"❌ Failed to fetch data. HTTP Status Code: {response.status_code}")
