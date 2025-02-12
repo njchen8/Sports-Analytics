@@ -104,7 +104,7 @@ for cell in player_prop_cells:
 # ✅ Convert to DataFrame & Save
 df = pd.DataFrame(props_data)
 
-csv_path = "underdog_player_props.csv"
+csv_path = "underdog_player_props_fixed.csv"
 df.to_csv(csv_path, index=False, encoding="utf-8-sig")
 print(f"✅ Player props saved to '{csv_path}'")
 
