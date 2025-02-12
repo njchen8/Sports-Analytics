@@ -5,12 +5,13 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+import itertools
 
 print("🚀 Loading datasets...")
 
 # Load datasets
 player_data = pd.read_csv("nba_players_game_logs_2018_25.csv")
-prop_data = pd.read_csv("underdog_player_props.csv")
+prop_data = pd.read_csv("underdog_player_props_fixed.csv")
 
 print("✅ Datasets loaded successfully.")
 
@@ -77,7 +78,7 @@ print("✅ Model built successfully.")
 early_stopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
 
 print("🏋️ Training model...")
-model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_test, y_test), callbacks=[early_stopping])
+model.fit(X_train, y_train, epochs=5, batch_size=32, validation_data=(X_test, y_test), callbacks=[early_stopping])
 print("✅ Model training complete.")
 
 # Predict probabilities
@@ -86,38 +87,55 @@ merged_data["P(over)"] = model.predict(scaler.transform(merged_data[features]))
 merged_data["P(under)"] = 1 - merged_data["P(over)"]
 print("✅ Predictions generated.")
 
-# Compute expected values (EV)
+# Compute expected values (EV) for both Over and Under
 print("📊 Calculating expected values (EV)...")
 merged_data["EV_over"] = (
-    merged_data["P(over)"] * (merged_data["Higher Payout"] - 1) -
-    (1 - merged_data["P(over)"])
+    merged_data["P(over)"] * (merged_data["Higher Payout"] - 1) - 
+    (1 - merged_data["P(over)"]) * 1  # Losing amount is the $1 bet
 )
 merged_data["EV_under"] = (
-    merged_data["P(under)"] * (merged_data["Lower Payout"] - 1) -
-    (1 - merged_data["P(under)"])
+    merged_data["P(under)"] * (merged_data["Lower Payout"] - 1) - 
+    (1 - merged_data["P(under)"]) * 1  # Losing amount is the $1 bet
 )
+
 print("✅ EV calculations complete.")
 
-# Select the best prop bet for each player
-print("📊 Selecting best prop bets...")
-merged_data["Best Bet"] = np.where(merged_data["EV_over"] > merged_data["EV_under"], "Over", "Under")
-merged_data["Best EV"] = merged_data[["EV_over", "EV_under"]].max(axis=1)
+# Function to calculate parlay EV
+def calculate_parlay_ev(props):
+    probabilities = [prop['P(over)'] if prop['Stat Type'] == 'Over' else prop['P(under)'] for prop in props]
+    payouts = [prop['Higher Payout'] if prop['Stat Type'] == 'Over' else prop['Lower Payout'] for prop in props]
+    
+    # Check if any payout is invalid (NaN or None)
+    if any(pd.isna(payout) or payout is None for payout in payouts):
+        return None  # Return None if there's an invalid payout
 
-# Sort by "Best EV" column in descending order
-merged_data = merged_data.sort_values(by="Best EV", ascending=False)
+    # Parlay hit probability: product of individual prop hit probabilities
+    parlay_hit_prob = np.prod(probabilities)
+    
+    # Parlay payout: product of individual prop payouts (payouts are already numeric)
+    parlay_payout = np.prod([payout - 1 for payout in payouts])
+    
+    # EV calculation for parlay
+    parlay_ev = (parlay_hit_prob * parlay_payout) - (1 - parlay_hit_prob)
+    return parlay_ev
 
-# Remove duplicate player rows based on 'Player' and 'Best Bet'
-print("🔄 Removing duplicate player rows...")
-final_props = merged_data.drop_duplicates(subset=["Player", "Best Bet"])
+# Generating parlays for 2 to 6 props
+parlay_results = []
+for n in range(2, 7):  # For parlays of 2, 3, 4, 5, 6 props
+    for combination in itertools.combinations(merged_data.to_dict(orient='records'), n):
+        parlay_ev = calculate_parlay_ev(combination)
+        parlay_results.append({
+            'Combination': combination,
+            'Parlay EV': parlay_ev
+        })
 
-# Select only relevant columns for the final CSV
-final_props = final_props[["Player", "Stat Type", "Prop Line", "Best Bet", "Best EV"]]
+# Convert to DataFrame for output
+parlay_results_df = pd.DataFrame(parlay_results)
+print("📋 Parlay EV calculations complete.")
 
-# Save to CSV
-print("💾 Saving relevant props to CSV...")
-final_props.to_csv("relevant_props_sorted.csv", index=False)
-print("✅ Relevant props saved as 'relevant_props_sorted.csv'.")
+# Save parlay results to CSV
+parlay_results_df.to_csv("parlay_ev_results.csv", index=False)
+print("✅ Parlay EV results saved as 'parlay_ev_results.csv'.")
 
-# Print first few rows to confirm
-print("📋 Sample of saved props:")
-print(final_props.head())
+# Sample of parlay EV results
+print(parlay_results_df.head())
