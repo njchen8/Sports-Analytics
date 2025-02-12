@@ -1,70 +1,391 @@
-﻿Player,Stat Type,Prop Line,Higher Payout,Lower Payout
-Scottie Barnes,Points,20.5,1,1
-Scottie Barnes,Pts + Rebs + Asts,34.5,0.94x,1.05x
-Scottie Barnes,Assists,5.5,0.89x,1.11x
-Scottie Barnes,1Q Points,4.5,1,1
-Immanuel Quickley,Points,15.5,0.94x,1.05x
-Immanuel Quickley,Pts + Rebs + Asts,25.5,0.92x,1.07x
-Immanuel Quickley,Assists,5.5,0.92x,1.07x
-Immanuel Quickley,Rebounds,3.5,0.94x,1.04x
-Joel Embiid,Points,27.5,1,1
-Joel Embiid,Pts + Rebs + Asts,42.5,1,1
-Joel Embiid,1Q Points,5.5,1,1
-Joel Embiid,Assists,4.5,1,1
-Gradey Dick,Points,13.5,1,1
-Gradey Dick,Pts + Rebs + Asts,19.5,1,1
-Gradey Dick,1Q Points,3.5,1,1
-Gradey Dick,Assists,1.5,1.05x,0.94x
-Kevin Durant,Points,26.5,1,1
-Kevin Durant,Pts + Rebs + Asts,36.5,1,1
-Kevin Durant,1Q Points,8.5,1.06x,0.93x
-Kevin Durant,Rebounds,5.5,1,1
-Devin Booker,Points,28.5,1,1
-Devin Booker,Pts + Rebs + Asts,38.5,1,1
-Devin Booker,Assists,5.5,0.88x,1.13x
-Devin Booker,1Q Points,5.5,0.92x,1.06x
-Zach Edey,Points,6.5,1,1
-Zach Edey,Pts + Rebs + Asts,14.5,1,1
-Zach Edey,Assists,0.5,0.87x,1.12x
-Zach Edey,Rebounds,6.5,1,1
-GG Jackson,Points,9.5,1,1
-GG Jackson,Pts + Rebs + Asts,14.5,1,1
-GG Jackson,1Q Points,2.5,1,1
-GG Jackson,Rebounds,3.5,1.18x,0.84x
-Luke Kennard,Points,6.5,1.09x,0.91x
-Luke Kennard,Pts + Rebs + Asts,11.5,1,1
-Luke Kennard,1Q Points,0.5,1.18x,0.84x
-Luke Kennard,Rebounds,2.5,1.12x,0.87x
-Brandon Clarke,Points,7.5,1,1
-Brandon Clarke,Pts + Rebs + Asts,13.5,1,1
-Brandon Clarke,Assists,0.5,0.85x,1.16x
-Brandon Clarke,1Q Points,1.5,0.91x,1.08x
-Jaylen Wells,Points,6.5,1,1
-Jaylen Wells,Pts + Rebs + Asts,10.5,1,1
-Jaylen Wells,1Q Points,2.5,1,1
-Jaylen Wells,Rebounds,2.5,1.13x,0.88x
-Ja Morant,Points,"21.5
-0.5",1,1
-Ja Morant,Points,20.5,1,1
-Ja Morant,Pts + Rebs + Asts,31.5,1,1
-Ja Morant,Assists,6.5,0.93x,1.06x
-Desmond Bane,Points,20.5,1,1
-Desmond Bane,Pts + Rebs + Asts,30.5,1,1
-Desmond Bane,1Q Points,4.5,0.91x,1.08x
-Desmond Bane,Assists,5.5,1.07x,0.92x
-Jaren Jackson Jr.,Points,21.5,1,1
-Jaren Jackson Jr.,Pts + Rebs + Asts,29.5,1,1
-Jaren Jackson Jr.,Assists,2.5,1.09x,0.91x
-Jaren Jackson Jr.,1Q Points,4.5,1.07x,0.92x
-Tyus Jones,Points,11.5,1,1
-Tyus Jones,Pts + Rebs + Asts,19.5,1,1
-Tyus Jones,Assists,5.5,0.89x,1.12x
-Tyus Jones,1Q Points,2.5,1,1
-Santi Aldama,Points,9.5,1,1
-Santi Aldama,Pts + Rebs + Asts,17.5,1,1
-Santi Aldama,Assists,1.5,1,1
-Santi Aldama,1Q Points,2.5,1,1
-Nick Richards,Points,8.5,1,1
-Nick Richards,Pts + Rebs + Asts,17.5,1,1
-Nick Richards,Rebounds,8.5,1,1
-Nick Richards,1Q Points,2.5,1.14x,0.86x
+﻿Player,Current Team,Opponent Team,Stat Type,Prop Line,Higher Payout,Lower Payout
+Joel Embiid,TOR,PHI,Points,27.5,0.9x,1.1x
+Joel Embiid,TOR,PHI,Pts + Rebs + Asts,27.5,0.9x,1.1x
+Joel Embiid,TOR,PHI,Assists,42.5,0.9x,1.1x
+Joel Embiid,TOR,PHI,1Q Pts + Rebs + Asts,42.5,0.9x,1.1x
+Paul George,TOR,PHI,Points,13.5,0.85x,1.15x
+Paul George,TOR,PHI,Pts + Rebs + Asts,13.5,0.85x,1.15x
+Paul George,TOR,PHI,1Q Points,23.5,0.85x,1.15x
+Paul George,TOR,PHI,Assists,23.5,0.85x,1.15x
+Immanuel Quickley,TOR,PHI,Points,17.5,0.92x,1.07x
+Immanuel Quickley,TOR,PHI,Pts + Rebs + Asts,17.5,0.92x,1.07x
+Immanuel Quickley,TOR,PHI,Rebounds,28.0,0.92x,1.07x
+Immanuel Quickley,TOR,PHI,1Q Pts + Rebs + Asts,28.0,0.92x,1.07x
+Jamal Shead,TOR,PHI,Points,6.5,0.91x,1.08x
+Jamal Shead,TOR,PHI,Pts + Rebs + Asts,6.5,0.91x,1.08x
+Jamal Shead,TOR,PHI,Rebounds,12.5,0.91x,1.08x
+Jamal Shead,TOR,PHI,Assists,12.5,0.91x,1.08x
+Jonathan Mogbo,TOR,PHI,Points,8.5,0.92x,1.07x
+Jonathan Mogbo,TOR,PHI,Pts + Rebs + Asts,8.5,0.92x,1.07x
+Jonathan Mogbo,TOR,PHI,Assists,16.5,0.92x,1.07x
+Jonathan Mogbo,TOR,PHI,Rebounds,16.5,0.92x,1.07x
+Guerschon Yabusele,TOR,PHI,Points,9.5,1.12x,0.88x
+Guerschon Yabusele,TOR,PHI,Pts + Rebs + Asts,9.5,1.12x,0.88x
+Guerschon Yabusele,TOR,PHI,Assists,17.5,1.12x,0.88x
+Guerschon Yabusele,TOR,PHI,Rebounds,17.5,1.12x,0.88x
+Kelly Oubre,TOR,PHI,Points,12.5,1,1
+Kelly Oubre,TOR,PHI,Pts + Rebs + Asts,12.5,1,1
+Kelly Oubre,TOR,PHI,1Q Points,21.0,1,1
+Kelly Oubre,TOR,PHI,Rebounds,21.0,1,1
+Ochai Agbaji,TOR,PHI,Points,10.5,1,1
+Ochai Agbaji,TOR,PHI,Pts + Rebs + Asts,10.5,1,1
+Ochai Agbaji,TOR,PHI,1Q Points,16.5,1,1
+Ochai Agbaji,TOR,PHI,Assists,16.5,1,1
+Scottie Barnes,TOR,PHI,Points,21.5,1.12x,0.89x
+Scottie Barnes,TOR,PHI,Pts + Rebs + Asts,21.5,1.12x,0.89x
+Scottie Barnes,TOR,PHI,1Q Pts + Rebs + Asts,34.5,1.12x,0.89x
+Scottie Barnes,TOR,PHI,1Q Points,34.5,1.12x,0.89x
+Tyrese Maxey,TOR,PHI,Points,26.5,1,1
+Tyrese Maxey,TOR,PHI,Pts + Rebs + Asts,26.5,1,1
+Tyrese Maxey,TOR,PHI,1Q Pts + Rebs + Asts,36.5,1,1
+Tyrese Maxey,TOR,PHI,Rebounds,36.5,1,1
+Gradey Dick,TOR,PHI,Points,13.5,1,1
+Gradey Dick,TOR,PHI,Pts + Rebs + Asts,13.5,1,1
+Gradey Dick,TOR,PHI,Assists,18.5,1,1
+Gradey Dick,TOR,PHI,1Q Points,18.5,1,1
+Ja'Kobe Walter,TOR,PHI,Points,8.5,1.09x,0.9x
+Ja'Kobe Walter,TOR,PHI,Pts + Rebs + Asts,8.5,1.09x,0.9x
+Ja'Kobe Walter,TOR,PHI,Rebounds,13.5,1.09x,0.9x
+Ja'Kobe Walter,TOR,PHI,Assists,13.5,1.09x,0.9x
+Quentin Grimes,TOR,PHI,Points,8.5,1.1x,0.9x
+Quentin Grimes,TOR,PHI,Pts + Rebs + Asts,8.5,1.1x,0.9x
+Quentin Grimes,TOR,PHI,Rebounds,14.5,1.1x,0.9x
+Quentin Grimes,TOR,PHI,Assists,14.5,1.1x,0.9x
+Justin Edwards,TOR,PHI,Points,6.5,1.05x,0.93x
+Justin Edwards,TOR,PHI,Pts + Rebs + Asts,6.5,1.05x,0.93x
+Justin Edwards,TOR,PHI,Rebounds,12.5,1.05x,0.93x
+Justin Edwards,TOR,PHI,1Q Points,12.5,1.05x,0.93x
+Chris Boucher,TOR,PHI,Points,8.5,1.11x,0.89x
+Chris Boucher,TOR,PHI,Pts + Rebs + Asts,8.5,1.11x,0.89x
+Chris Boucher,TOR,PHI,Assists,14.5,1.11x,0.89x
+Chris Boucher,TOR,PHI,Rebounds,14.5,1.11x,0.89x
+Jalen Brunson,IND,NYK,Points,28.5,1.04x,0.94x
+Jalen Brunson,IND,NYK,Pts + Rebs + Asts,28.5,1.04x,0.94x
+Jalen Brunson,IND,NYK,1Q Points,39.5,1.04x,0.94x
+Jalen Brunson,IND,NYK,1Q Pts + Rebs + Asts,39.5,1.04x,0.94x
+Karl-Anthony Towns,IND,NYK,Points,25.5,1,1
+Karl-Anthony Towns,IND,NYK,Pts + Rebs + Asts,25.5,1,1
+Karl-Anthony Towns,IND,NYK,1Q Points,42.5,1,1
+Karl-Anthony Towns,IND,NYK,Rebounds,42.5,1,1
+Andrew Nembhard,IND,NYK,Points,10.5,1.19x,0.83x
+Andrew Nembhard,IND,NYK,Pts + Rebs + Asts,10.5,1.19x,0.83x
+Andrew Nembhard,IND,NYK,Rebounds,19.5,1.19x,0.83x
+Andrew Nembhard,IND,NYK,1Q Points,19.5,1.19x,0.83x
+Josh Hart,IND,NYK,Points,15.5,1.12x,0.88x
+Josh Hart,IND,NYK,Pts + Rebs + Asts,15.5,1.12x,0.88x
+Josh Hart,IND,NYK,Assists,31.5,1.12x,0.88x
+Josh Hart,IND,NYK,1Q Points,31.5,1.12x,0.88x
+Deuce McBride,IND,NYK,Points,8.5,1.05x,0.94x
+Deuce McBride,IND,NYK,Pts + Rebs + Asts,8.5,1.05x,0.94x
+Deuce McBride,IND,NYK,Assists,14.5,1.05x,0.94x
+Deuce McBride,IND,NYK,Rebounds,14.5,1.05x,0.94x
+T.J. McConnell,IND,NYK,Points,7.5,0.9x,1.1x
+T.J. McConnell,IND,NYK,Rebounds,7.5,0.9x,1.1x
+T.J. McConnell,IND,NYK,Assists,1.5,0.9x,1.1x
+T.J. McConnell,IND,NYK,Rebounds + Assists,1.5,0.9x,1.1x
+Obi Toppin,IND,NYK,Pts + Rebs + Asts,17.5,1.15x,0.85x
+Obi Toppin,IND,NYK,Assists,17.5,1.15x,0.85x
+Obi Toppin,IND,NYK,3-Pointers Made,1.5,1.15x,0.85x
+Obi Toppin,IND,NYK,Points + Assists,1.5,1.15x,0.85x
+Obi Toppin,IND,NYK,Points + Rebounds,1.5,1.15x,0.85x
+Ben Sheppard,IND,NYK,Assists,1.5,1.15x,0.85x
+Ben Sheppard,IND,NYK,Rebounds + Assists,1.5,1.15x,0.85x
+Ben Sheppard,IND,NYK,3-Pointers Made,3.5,1.15x,0.85x
+Ben Sheppard,IND,NYK,Points + Assists,3.5,1.15x,0.85x
+Tyrese Haliburton,IND,NYK,Points,18.5,1,1
+Tyrese Haliburton,IND,NYK,Pts + Rebs + Asts,18.5,1,1
+Tyrese Haliburton,IND,NYK,Assists,31.5,1,1
+Tyrese Haliburton,IND,NYK,1Q Pts + Rebs + Asts,31.5,1,1
+Pascal Siakam,IND,NYK,Points,21.5,1,1
+Pascal Siakam,IND,NYK,Pts + Rebs + Asts,21.5,1,1
+Pascal Siakam,IND,NYK,Rebounds,32.5,1,1
+Pascal Siakam,IND,NYK,1Q Points,32.5,1,1
+Mikal Bridges,IND,NYK,Points,17.5,1.17x,0.84x
+Mikal Bridges,IND,NYK,Pts + Rebs + Asts,17.5,1.17x,0.84x
+Mikal Bridges,IND,NYK,Assists,24.5,1.17x,0.84x
+Mikal Bridges,IND,NYK,Rebounds,24.5,1.17x,0.84x
+Aaron Nesmith,IND,NYK,Points,7.5,0.94x,1.05x
+Aaron Nesmith,IND,NYK,Pts + Rebs + Asts,7.5,0.94x,1.05x
+Aaron Nesmith,IND,NYK,Rebounds,14.5,0.94x,1.05x
+Aaron Nesmith,IND,NYK,Assists,14.5,0.94x,1.05x
+Bennedict Mathurin,IND,NYK,Pts + Rebs + Asts,19.5,1.16x,0.83x
+Bennedict Mathurin,IND,NYK,Assists,19.5,1.16x,0.83x
+Bennedict Mathurin,IND,NYK,Rebounds + Assists,1.5,1.16x,0.83x
+Bennedict Mathurin,IND,NYK,3-Pointers Made,1.5,1.16x,0.83x
+Thomas Bryant,IND,NYK,Points,10.5,0.94x,1.04x
+Thomas Bryant,IND,NYK,Pts + Rebs + Asts,10.5,0.94x,1.04x
+Thomas Bryant,IND,NYK,Assists,19.5,0.94x,1.04x
+Thomas Bryant,IND,NYK,Rebounds,19.5,0.94x,1.04x
+Precious Achiuwa,IND,NYK,Points,10.5,1,1
+Precious Achiuwa,IND,NYK,Pts + Rebs + Asts,10.5,1,1
+Precious Achiuwa,IND,NYK,Assists,20.5,1,1
+Precious Achiuwa,IND,NYK,1Q Points,20.5,1,1
+Cade Cunningham,CHI,DET,Points,27.5,1.1x,0.9x
+Cade Cunningham,CHI,DET,Pts + Rebs + Asts,27.5,1.1x,0.9x
+Cade Cunningham,CHI,DET,Rebounds,44.0,1.1x,0.9x
+Cade Cunningham,CHI,DET,Assists,44.0,1.1x,0.9x
+Coby White,CHI,DET,Points,20.5,0.94x,1.05x
+Coby White,CHI,DET,Pts + Rebs + Asts,20.5,0.94x,1.05x
+Coby White,CHI,DET,Assists,28.5,0.94x,1.05x
+Coby White,CHI,DET,1Q Pts + Rebs + Asts,28.5,0.94x,1.05x
+Ausar Thompson,CHI,DET,Points,10.5,1.14x,0.86x
+Ausar Thompson,CHI,DET,Pts + Rebs + Asts,10.5,1.14x,0.86x
+Ausar Thompson,CHI,DET,Assists,19.5,1.14x,0.86x
+Ausar Thompson,CHI,DET,1Q Points,19.5,1.14x,0.86x
+Patrick Williams,CHI,DET,Points,9.5,1,1
+Patrick Williams,CHI,DET,Pts + Rebs + Asts,9.5,1,1
+Patrick Williams,CHI,DET,Assists,15.0,1,1
+Patrick Williams,CHI,DET,Rebounds,15.0,1,1
+Dennis Schroder,CHI,DET,Points,6.5,1.1x,0.9x
+Dennis Schroder,CHI,DET,Pts + Rebs + Asts,6.5,1.1x,0.9x
+Dennis Schroder,CHI,DET,Assists,11.5,1.1x,0.9x
+Dennis Schroder,CHI,DET,Rebounds,11.5,1.1x,0.9x
+Matas Buzelis,CHI,DET,Points,12.5,0.91x,1.09x
+Matas Buzelis,CHI,DET,Pts + Rebs + Asts,12.5,0.91x,1.09x
+Matas Buzelis,CHI,DET,Assists,19.5,0.91x,1.09x
+Matas Buzelis,CHI,DET,Rebounds,19.5,0.91x,1.09x
+Tre Jones,CHI,DET,Points,4.5,1.12x,0.89x
+Tre Jones,CHI,DET,Pts + Rebs + Asts,4.5,1.12x,0.89x
+Tre Jones,CHI,DET,Rebounds,11.5,1.12x,0.89x
+Tre Jones,CHI,DET,Assists,11.5,1.12x,0.89x
+Tim Hardaway Jr.,CHI,DET,Points,10.5,1.06x,0.93x
+Tim Hardaway Jr.,CHI,DET,Pts + Rebs + Asts,10.5,1.06x,0.93x
+Tim Hardaway Jr.,CHI,DET,1Q Points,14.5,1.06x,0.93x
+Tim Hardaway Jr.,CHI,DET,Assists,14.5,1.06x,0.93x
+Kevin Huerter,CHI,DET,Points,8.0,1.11x,0.88x
+Kevin Huerter,CHI,DET,Pts + Rebs + Asts,8.0,1.11x,0.88x
+Kevin Huerter,CHI,DET,Assists,12.5,1.11x,0.88x
+Kevin Huerter,CHI,DET,Rebounds,12.5,1.11x,0.88x
+Jalen Smith,CHI,DET,Points,8.5,0.84x,1.16x
+Jalen Smith,CHI,DET,Pts + Rebs + Asts,8.5,0.84x,1.16x
+Jalen Smith,CHI,DET,Assists,15.5,0.84x,1.16x
+Jalen Smith,CHI,DET,Rebounds,15.5,0.84x,1.16x
+Nikola Vucevic,CHI,DET,Points,18.5,1.07x,0.92x
+Nikola Vucevic,CHI,DET,Pts + Rebs + Asts,18.5,1.07x,0.92x
+Nikola Vucevic,CHI,DET,Assists,32.5,1.07x,0.92x
+Nikola Vucevic,CHI,DET,Rebounds,32.5,1.07x,0.92x
+Josh Giddey,CHI,DET,Points,14.5,1.12x,0.88x
+Josh Giddey,CHI,DET,Pts + Rebs + Asts,14.5,1.12x,0.88x
+Josh Giddey,CHI,DET,1Q Points,28.5,1.12x,0.88x
+Josh Giddey,CHI,DET,Rebounds,28.5,1.12x,0.88x
+Tobias Harris,CHI,DET,Points,15.5,0.87x,1.12x
+Tobias Harris,CHI,DET,Pts + Rebs + Asts,15.5,0.87x,1.12x
+Tobias Harris,CHI,DET,1Q Points,22.5,0.87x,1.12x
+Tobias Harris,CHI,DET,Assists,22.5,0.87x,1.12x
+Jalen Duren,CHI,DET,Points,13.5,0.92x,1.07x
+Jalen Duren,CHI,DET,Pts + Rebs + Asts,13.5,0.92x,1.07x
+Jalen Duren,CHI,DET,1Q Pts + Rebs + Asts,27.5,0.92x,1.07x
+Jalen Duren,CHI,DET,Assists,27.5,0.92x,1.07x
+Isaiah Stewart,CHI,DET,Points,5.5,1.28x,0.78x
+Isaiah Stewart,CHI,DET,Pts + Rebs + Asts,5.5,1.28x,0.78x
+Isaiah Stewart,CHI,DET,Rebounds,11.5,1.28x,0.78x
+Isaiah Stewart,CHI,DET,Assists,11.5,1.28x,0.78x
+Ayo Dosunmu,CHI,DET,Points,13.0,0.87x,1.11x
+Ayo Dosunmu,CHI,DET,Pts + Rebs + Asts,13.0,0.87x,1.11x
+Ayo Dosunmu,CHI,DET,Assists,21.5,0.87x,1.11x
+Ayo Dosunmu,CHI,DET,Rebounds,21.5,0.87x,1.11x
+Malik Beasley,CHI,DET,Points,16.5,0.94x,1.04x
+Malik Beasley,CHI,DET,Pts + Rebs + Asts,16.5,0.94x,1.04x
+Malik Beasley,CHI,DET,Assists,20.5,0.94x,1.04x
+Malik Beasley,CHI,DET,Rebounds,20.5,0.94x,1.04x
+Ron Holland,CHI,DET,Points,5.5,0.93x,1.05x
+Ron Holland,CHI,DET,Pts + Rebs + Asts,5.5,0.93x,1.05x
+Ron Holland,CHI,DET,Assists,10.5,0.93x,1.05x
+Ron Holland,CHI,DET,Rebounds,10.5,0.93x,1.05x
+Simone Fontecchio,CHI,DET,Points,4.5,0.93x,1.05x
+Simone Fontecchio,CHI,DET,Pts + Rebs + Asts,4.5,0.93x,1.05x
+Simone Fontecchio,CHI,DET,Assists,8.5,0.93x,1.05x
+Simone Fontecchio,CHI,DET,Rebounds,8.5,0.93x,1.05x
+Kevin Durant,MEM,PHX,Points,26.5,1.05x,0.93x
+Kevin Durant,MEM,PHX,Pts + Rebs + Asts,26.5,1.05x,0.93x
+Kevin Durant,MEM,PHX,1Q Pts + Rebs + Asts,37.5,1.05x,0.93x
+Kevin Durant,MEM,PHX,Assists,37.5,1.05x,0.93x
+Devin Booker,MEM,PHX,Points,28.5,1.06x,0.93x
+Devin Booker,MEM,PHX,Pts + Rebs + Asts,28.5,1.06x,0.93x
+Devin Booker,MEM,PHX,1Q Pts + Rebs + Asts,38.5,1.06x,0.93x
+Devin Booker,MEM,PHX,1Q Points,38.5,1.06x,0.93x
+Zach Edey,MEM,PHX,Points,6.5,1.07x,0.92x
+Zach Edey,MEM,PHX,Pts + Rebs + Asts,6.5,1.07x,0.92x
+Zach Edey,MEM,PHX,Assists,15.5,1.07x,0.92x
+Zach Edey,MEM,PHX,Rebounds,15.5,1.07x,0.92x
+Grayson Allen,MEM,PHX,Points,11.5,1.13x,0.88x
+Grayson Allen,MEM,PHX,Pts + Rebs + Asts,11.5,1.13x,0.88x
+Grayson Allen,MEM,PHX,Rebounds,17.5,1.13x,0.88x
+Grayson Allen,MEM,PHX,Assists,17.5,1.13x,0.88x
+GG Jackson,MEM,PHX,Points,9.5,0.84x,1.17x
+GG Jackson,MEM,PHX,Pts + Rebs + Asts,9.5,0.84x,1.17x
+GG Jackson,MEM,PHX,Assists,13.5,0.84x,1.17x
+GG Jackson,MEM,PHX,Rebounds,13.5,0.84x,1.17x
+Luke Kennard,MEM,PHX,Points,6.5,1.18x,0.84x
+Luke Kennard,MEM,PHX,Pts + Rebs + Asts,6.5,1.18x,0.84x
+Luke Kennard,MEM,PHX,Rebounds,11.5,1.18x,0.84x
+Luke Kennard,MEM,PHX,1Q Points,11.5,1.18x,0.84x
+Mason Plumlee,MEM,PHX,Points,3.5,0.91x,1.08x
+Mason Plumlee,MEM,PHX,Pts + Rebs + Asts,3.5,0.91x,1.08x
+Mason Plumlee,MEM,PHX,Assists,11.5,0.91x,1.08x
+Mason Plumlee,MEM,PHX,Rebounds,11.5,0.91x,1.08x
+Nick Richards,MEM,PHX,Points,8.5,1.14x,0.86x
+Nick Richards,MEM,PHX,Pts + Rebs + Asts,8.5,1.14x,0.86x
+Nick Richards,MEM,PHX,Assists,17.5,1.14x,0.86x
+Nick Richards,MEM,PHX,1Q Points,17.5,1.14x,0.86x
+Ja Morant,MEM,PHX,Points,"21.5
+0.5",0.84x,1.18x
+Ja Morant,MEM,PHX,Points,0.5,0.84x,1.18x
+Ja Morant,MEM,PHX,Pts + Rebs + Asts,22.5,0.84x,1.18x
+Ja Morant,MEM,PHX,Rebounds,22.5,0.84x,1.18x
+Desmond Bane,MEM,PHX,Points,19.5,1.1x,0.9x
+Desmond Bane,MEM,PHX,Pts + Rebs + Asts,19.5,1.1x,0.9x
+Desmond Bane,MEM,PHX,1Q Pts + Rebs + Asts,30.0,1.1x,0.9x
+Desmond Bane,MEM,PHX,1Q Points,30.0,1.1x,0.9x
+Jaren Jackson Jr.,MEM,PHX,Points,22.5,1.09x,0.91x
+Jaren Jackson Jr.,MEM,PHX,Pts + Rebs + Asts,22.5,1.09x,0.91x
+Jaren Jackson Jr.,MEM,PHX,1Q Pts + Rebs + Asts,30.5,1.09x,0.91x
+Jaren Jackson Jr.,MEM,PHX,Assists,30.5,1.09x,0.91x
+Tyus Jones,MEM,PHX,Points,11.5,1.12x,0.89x
+Tyus Jones,MEM,PHX,Pts + Rebs + Asts,11.5,1.12x,0.89x
+Tyus Jones,MEM,PHX,Rebounds,19.5,1.12x,0.89x
+Tyus Jones,MEM,PHX,Assists,19.5,1.12x,0.89x
+Ryan Dunn,MEM,PHX,Points,5.5,0.87x,1.12x
+Ryan Dunn,MEM,PHX,Pts + Rebs + Asts,5.5,0.87x,1.12x
+Ryan Dunn,MEM,PHX,Rebounds,9.5,0.87x,1.12x
+Ryan Dunn,MEM,PHX,Assists,9.5,0.87x,1.12x
+Santi Aldama,MEM,PHX,Points,9.5,0.91x,1.08x
+Santi Aldama,MEM,PHX,Pts + Rebs + Asts,9.5,0.91x,1.08x
+Santi Aldama,MEM,PHX,Rebounds,17.5,0.91x,1.08x
+Santi Aldama,MEM,PHX,1Q Points,17.5,0.91x,1.08x
+Brandon Clarke,MEM,PHX,Points,7.5,0.93x,1.05x
+Brandon Clarke,MEM,PHX,Pts + Rebs + Asts,7.5,0.93x,1.05x
+Brandon Clarke,MEM,PHX,Assists,12.5,0.93x,1.05x
+Brandon Clarke,MEM,PHX,Rebounds,12.5,0.93x,1.05x
+Jaylen Wells,MEM,PHX,Points,6.5,1.13x,0.88x
+Jaylen Wells,MEM,PHX,Pts + Rebs + Asts,6.5,1.13x,0.88x
+Jaylen Wells,MEM,PHX,Assists,10.5,1.13x,0.88x
+Jaylen Wells,MEM,PHX,Rebounds,10.5,1.13x,0.88x
+Anthony Edwards,MIL,MIN,Points,30.5,1.09x,0.9x
+Anthony Edwards,MIL,MIN,Pts + Rebs + Asts,30.5,1.09x,0.9x
+Anthony Edwards,MIL,MIN,Rebounds,42.5,1.09x,0.9x
+Anthony Edwards,MIL,MIN,1Q Points,42.5,1.09x,0.9x
+Kyle Kuzma,MIL,MIN,Points,17.5,0.92x,1.07x
+Kyle Kuzma,MIL,MIN,Pts + Rebs + Asts,17.5,0.92x,1.07x
+Kyle Kuzma,MIL,MIN,Rebounds,29.5,0.92x,1.07x
+Kyle Kuzma,MIL,MIN,Assists,29.5,0.92x,1.07x
+Brook Lopez,MIL,MIN,Points,12.5,1.1x,0.9x
+Brook Lopez,MIL,MIN,Pts + Rebs + Asts,12.5,1.1x,0.9x
+Brook Lopez,MIL,MIN,Assists,19.5,1.1x,0.9x
+Brook Lopez,MIL,MIN,1Q Points,19.5,1.1x,0.9x
+Mike Conley,MIL,MIN,Points,9.5,1.11x,0.89x
+Mike Conley,MIL,MIN,Pts + Rebs + Asts,9.5,1.11x,0.89x
+Mike Conley,MIL,MIN,Assists,19.5,1.11x,0.89x
+Mike Conley,MIL,MIN,1Q Points,19.5,1.11x,0.89x
+Naz Reid,MIL,MIN,Points,17.5,1,1
+Naz Reid,MIL,MIN,Pts + Rebs + Asts,17.5,1,1
+Naz Reid,MIL,MIN,1Q Points,28.5,1,1
+Naz Reid,MIL,MIN,Rebounds,28.5,1,1
+Damian Lillard,MIL,MIN,Points,26.5,0.92x,1.07x
+Damian Lillard,MIL,MIN,Pts + Rebs + Asts,26.5,0.92x,1.07x
+Damian Lillard,MIL,MIN,1Q Points,40.5,0.92x,1.07x
+Damian Lillard,MIL,MIN,Assists,40.5,0.92x,1.07x
+Rudy Gobert,MIL,MIN,Points,11.5,0.79x,1.26x
+Rudy Gobert,MIL,MIN,Pts + Rebs + Asts,11.5,0.79x,1.26x
+Rudy Gobert,MIL,MIN,1Q Points,24.5,0.79x,1.26x
+Rudy Gobert,MIL,MIN,Assists,24.5,0.79x,1.26x
+Jaden McDaniels,MIL,MIN,Points,14.5,0.91x,1.08x
+Jaden McDaniels,MIL,MIN,Pts + Rebs + Asts,14.5,0.91x,1.08x
+Jaden McDaniels,MIL,MIN,1Q Points,25.5,0.91x,1.08x
+Jaden McDaniels,MIL,MIN,Rebounds,25.5,0.91x,1.08x
+Taurean Prince,MIL,MIN,Points,7.5,1.22x,0.81x
+Taurean Prince,MIL,MIN,Pts + Rebs + Asts,7.5,1.22x,0.81x
+Taurean Prince,MIL,MIN,Rebounds,14.5,1.22x,0.81x
+Taurean Prince,MIL,MIN,Assists,14.5,1.22x,0.81x
+LeBron James,UTA,LAL,Points,24.5,0.94x,1.04x
+LeBron James,UTA,LAL,Pts + Rebs + Asts,24.5,0.94x,1.04x
+LeBron James,UTA,LAL,Rebounds,39.5,0.94x,1.04x
+LeBron James,UTA,LAL,Assists,39.5,0.94x,1.04x
+Lauri Markkanen,UTA,LAL,Points,18.5,1.35x,0.76x
+Lauri Markkanen,UTA,LAL,Pts + Rebs + Asts,18.5,1.35x,0.76x
+Lauri Markkanen,UTA,LAL,Assists,24.5,1.35x,0.76x
+Lauri Markkanen,UTA,LAL,1Q Points,24.5,1.35x,0.76x
+Austin Reaves,UTA,LAL,Points,19.5,0.92x,1.07x
+Austin Reaves,UTA,LAL,Pts + Rebs + Asts,19.5,0.92x,1.07x
+Austin Reaves,UTA,LAL,1Q Points,28.5,0.92x,1.07x
+Austin Reaves,UTA,LAL,Assists,28.5,0.92x,1.07x
+Walker Kessler,UTA,LAL,Points,12.5,1.09x,0.91x
+Walker Kessler,UTA,LAL,Pts + Rebs + Asts,12.5,1.09x,0.91x
+Walker Kessler,UTA,LAL,Rebounds,25.5,1.09x,0.91x
+Walker Kessler,UTA,LAL,Assists,25.5,1.09x,0.91x
+Dorian Finney-Smith,UTA,LAL,Points,7.5,0.75x,1.41x
+Dorian Finney-Smith,UTA,LAL,Pts + Rebs + Asts,7.5,0.75x,1.41x
+Dorian Finney-Smith,UTA,LAL,Assists,11.5,0.75x,1.41x
+Dorian Finney-Smith,UTA,LAL,1Q Points,11.5,0.75x,1.41x
+Jarred Vanderbilt,UTA,LAL,Points,4.5,0.85x,1.16x
+Jarred Vanderbilt,UTA,LAL,Pts + Rebs + Asts,4.5,0.85x,1.16x
+Jarred Vanderbilt,UTA,LAL,1Q Points,9.5,0.85x,1.16x
+Jarred Vanderbilt,UTA,LAL,Assists,9.5,0.85x,1.16x
+Jaxson Hayes,UTA,LAL,Points,8.5,1.33x,0.77x
+Jaxson Hayes,UTA,LAL,Pts + Rebs + Asts,8.5,1.33x,0.77x
+Jaxson Hayes,UTA,LAL,Rebounds,14.5,1.33x,0.77x
+Jaxson Hayes,UTA,LAL,Assists,14.5,1.33x,0.77x
+Luka Doncic,UTA,LAL,Points,25.5,1.1x,0.9x
+Luka Doncic,UTA,LAL,Pts + Rebs + Asts,25.5,1.1x,0.9x
+Luka Doncic,UTA,LAL,Assists,40.5,1.1x,0.9x
+Luka Doncic,UTA,LAL,Rebounds,40.5,1.1x,0.9x
+Keyonte George,UTA,LAL,Points,16.5,1.1x,0.9x
+Keyonte George,UTA,LAL,Pts + Rebs + Asts,16.5,1.1x,0.9x
+Keyonte George,UTA,LAL,Assists,25.5,1.1x,0.9x
+Keyonte George,UTA,LAL,1Q Points,25.5,1.1x,0.9x
+Jordan Clarkson,UTA,LAL,Points,18.5,1.06x,0.92x
+Jordan Clarkson,UTA,LAL,Pts + Rebs + Asts,18.5,1.06x,0.92x
+Jordan Clarkson,UTA,LAL,1Q Points,25.5,1.06x,0.92x
+Jordan Clarkson,UTA,LAL,Assists,25.5,1.06x,0.92x
+Rui Hachimura,UTA,LAL,Points,14.5,1.05x,0.93x
+Rui Hachimura,UTA,LAL,Pts + Rebs + Asts,14.5,1.05x,0.93x
+Rui Hachimura,UTA,LAL,Rebounds,19.5,1.05x,0.93x
+Rui Hachimura,UTA,LAL,1Q Points,19.5,1.05x,0.93x
+John Collins,UTA,LAL,Points,17.5,1.11x,0.89x
+John Collins,UTA,LAL,Pts + Rebs + Asts,17.5,1.11x,0.89x
+John Collins,UTA,LAL,Assists,26.5,1.11x,0.89x
+John Collins,UTA,LAL,1Q Points,26.5,1.11x,0.89x
+Gabe Vincent,UTA,LAL,Points,6.5,1.32x,0.77x
+Gabe Vincent,UTA,LAL,Pts + Rebs + Asts,6.5,1.32x,0.77x
+Gabe Vincent,UTA,LAL,Rebounds,9.5,1.32x,0.77x
+Gabe Vincent,UTA,LAL,Assists,9.5,1.32x,0.77x
+Isaiah Collier,UTA,LAL,Points,11.5,0.92x,1.07x
+Isaiah Collier,UTA,LAL,Pts + Rebs + Asts,11.5,0.92x,1.07x
+Isaiah Collier,UTA,LAL,1Q Points,24.5,0.92x,1.07x
+Isaiah Collier,UTA,LAL,Rebounds,24.5,0.92x,1.07x
+Jimmy Butler,DAL,GSW,Points,19.5,1.12x,0.89x
+Jimmy Butler,DAL,GSW,Pts + Rebs + Asts,19.5,1.12x,0.89x
+Jimmy Butler,DAL,GSW,1Q Points,30.5,1.12x,0.89x
+Jimmy Butler,DAL,GSW,Assists,30.5,1.12x,0.89x
+Kyrie Irving,DAL,GSW,Points,27.5,0.91x,1.08x
+Kyrie Irving,DAL,GSW,Pts + Rebs + Asts,27.5,0.91x,1.08x
+Kyrie Irving,DAL,GSW,Rebounds,39.5,0.91x,1.08x
+Kyrie Irving,DAL,GSW,Assists,39.5,0.91x,1.08x
+Klay Thompson,DAL,GSW,Points,14.5,1,1
+Klay Thompson,DAL,GSW,Pts + Rebs + Asts,14.5,1,1
+Klay Thompson,DAL,GSW,Rebounds,20.5,1,1
+Klay Thompson,DAL,GSW,1Q Points,20.5,1,1
+PJ Washington,DAL,GSW,Points,15.5,0.93x,1.06x
+PJ Washington,DAL,GSW,Pts + Rebs + Asts,15.5,0.93x,1.06x
+PJ Washington,DAL,GSW,Rebounds,27.5,0.93x,1.06x
+PJ Washington,DAL,GSW,Assists,27.5,0.93x,1.06x
+Dante Exum,DAL,GSW,Points,7.5,0.9x,1.09x
+Dante Exum,DAL,GSW,Pts + Rebs + Asts,7.5,0.9x,1.09x
+Dante Exum,DAL,GSW,1Q Points,13.5,0.9x,1.09x
+Dante Exum,DAL,GSW,Rebounds,13.5,0.9x,1.09x
+Stephen Curry,DAL,GSW,Points,27.5,0.89x,1.11x
+Stephen Curry,DAL,GSW,Pts + Rebs + Asts,27.5,0.89x,1.11x
+Stephen Curry,DAL,GSW,Rebounds,39.5,0.89x,1.11x
+Stephen Curry,DAL,GSW,Assists,39.5,0.89x,1.11x
+Draymond Green,DAL,GSW,Points,9.5,0.9x,1.1x
+Draymond Green,DAL,GSW,Pts + Rebs + Asts,9.5,0.9x,1.1x
+Draymond Green,DAL,GSW,Rebounds,22.5,0.9x,1.1x
+Draymond Green,DAL,GSW,Assists,22.5,0.9x,1.1x
+Brandin Podziemski,DAL,GSW,Points,11.5,1.11x,0.89x
+Brandin Podziemski,DAL,GSW,Pts + Rebs + Asts,11.5,1.11x,0.89x
+Brandin Podziemski,DAL,GSW,Assists,22.5,1.11x,0.89x
+Brandin Podziemski,DAL,GSW,Rebounds,22.5,1.11x,0.89x
+Buddy Hield,DAL,GSW,Points,15.5,1.06x,0.92x
+Buddy Hield,DAL,GSW,Pts + Rebs + Asts,15.5,1.06x,0.92x
+Buddy Hield,DAL,GSW,Assists,22.5,1.06x,0.92x
+Buddy Hield,DAL,GSW,Rebounds,22.5,1.06x,0.92x
