@@ -84,39 +84,42 @@ for matchup in matchup_sections:
                     current_team, opponent_team = team_two, team_one
 
                 # ✅ Extract all stat types and prop lines
-                stat_elements = card.find_elements(By.CSS_SELECTOR, ".styles__displayStat__g479A")
-                value_elements = card.find_elements(By.CSS_SELECTOR, ".styles__statValue__xmjlQ")
+                stat_lines = card.find_elements(By.CSS_SELECTOR, "[data-testid='stat-line-container']")
 
-                # ✅ Extract "Higher" and "Lower" payouts
-                higher_payout = "1"
-                lower_payout = "1"
+                for stat_line in stat_lines:
+                    try:
+                        stat_type = stat_line.get_attribute("data-appearance-stat").strip()
+                        prop_value = stat_line.find_element(By.CSS_SELECTOR, ".styles__statValue__xmjlQ span").text.strip()
 
-                payout_buttons = card.find_elements(By.XPATH, ".//div[contains(@class, 'styles__lineOption__xTSdA')]")
-                for button in payout_buttons:
-                    button_text = button.find_element(By.TAG_NAME, "span").text.strip()
-                    payout_element = button.find_elements(By.XPATH, ".//span[contains(@class, 'styles__payoutMultiplierWrapper__sfh5n')]//div[@style='opacity: 1; transform: none;']//span")
+                        # ✅ Extract "Higher" and "Lower" payouts **for each stat**
+                        higher_payout = "1"
+                        lower_payout = "1"
 
-                    payout_value = payout_element[0].text.strip() if payout_element else "1"
+                        payout_buttons = stat_line.find_elements(By.XPATH, ".//div[contains(@class, 'styles__lineOption__xTSdA')]")
+                        for button in payout_buttons:
+                            button_text = button.find_element(By.TAG_NAME, "span").text.strip()
+                            payout_element = button.find_elements(By.XPATH, ".//span[contains(@class, 'styles__payoutMultiplierWrapper__sfh5n')]//div[@style='opacity: 1; transform: none;']//span")
 
-                    if "Higher" in button_text:
-                        higher_payout = payout_value
-                    elif "Lower" in button_text:
-                        lower_payout = payout_value
+                            payout_value = payout_element[0].text.strip() if payout_element else "1"
 
-                # ✅ Ensure correct stat-value mapping
-                for stat_element, value_element in zip(stat_elements, value_elements):
-                    stat_type = stat_element.text.strip()
-                    prop_value = value_element.text.strip()
+                            if "Higher" in button_text:
+                                higher_payout = payout_value
+                            elif "Lower" in button_text:
+                                lower_payout = payout_value
 
-                    props_data.append({
-                        "Player": player_name,
-                        "Current Team": current_team,
-                        "Opponent Team": opponent_team,
-                        "Stat Type": stat_type,
-                        "Prop Line": prop_value,
-                        "Higher Payout": higher_payout,
-                        "Lower Payout": lower_payout
-                    })
+                        # ✅ Append to list
+                        props_data.append({
+                            "Player": player_name,
+                            "Current Team": current_team,
+                            "Opponent Team": opponent_team,
+                            "Stat Type": stat_type,
+                            "Prop Line": prop_value,
+                            "Higher Payout": higher_payout,
+                            "Lower Payout": lower_payout
+                        })
+
+                    except Exception as e:
+                        print(f"⚠️ Skipping a stat type due to missing data: {e}")
 
             except Exception as e:
                 print(f"⚠️ Skipping a player due to missing data: {e}")
