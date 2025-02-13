@@ -121,9 +121,9 @@ for matchup in matchup_sections:
 
 # ✅ Convert to DataFrame & Save
 df = pd.DataFrame(props_data)
-df.to_csv("underdog_home_team_props.csv", index=False, encoding="utf-8-sig")
+df.to_csv("underdog.csv", index=False, encoding="utf-8-sig")
 
-print(f"✅ Home team player props saved to 'underdog_home_team_props.csv'")
+print(f"✅ Home team player props saved to 'underdog.csv'")
 
 # ✅ Keep the browser open for debugging
 input("Press ENTER to close the browser...")
