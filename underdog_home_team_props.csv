@@ -1,0 +1,49 @@
+﻿Player,Current Team,Opponent Team,Stat Type,Prop Line,Higher Payout,Lower Payout
+Zion Williamson,NOP,SAC,points,23.5,1,1
+Zion Williamson,NOP,SAC,pts_rebs_asts,35.5,1,1
+Zion Williamson,NOP,SAC,period_1_points,5.5,1,1
+Zion Williamson,NOP,SAC,assists,4.5,1,1
+CJ McCollum,NOP,SAC,points,21.5,1,1
+CJ McCollum,NOP,SAC,pts_rebs_asts,28.5,1,1
+CJ McCollum,NOP,SAC,period_1_points,5.5,1,1
+CJ McCollum,NOP,SAC,rebounds,3.5,1,1
+Jose Alvarado,NOP,SAC,points,10.5,1,1
+Jose Alvarado,NOP,SAC,pts_rebs_asts,19.5,1,1
+Jose Alvarado,NOP,SAC,rebounds,2.5,1,1
+Jose Alvarado,NOP,SAC,period_1_points,2.5,1,1
+Yves Missi,NOP,SAC,points,8.5,1,1
+Yves Missi,NOP,SAC,pts_rebs_asts,18.5,1,1
+Yves Missi,NOP,SAC,rebounds,8.5,1,1
+Yves Missi,NOP,SAC,period_1_points,1.5,1,1
+Trey Murphy III,NOP,SAC,points,23.5,1,1
+Trey Murphy III,NOP,SAC,pts_rebs_asts,34.5,1,1
+Trey Murphy III,NOP,SAC,rebounds,5.5,1,1
+Trey Murphy III,NOP,SAC,period_1_points,5.5,1,1
+Stephen Curry,GSW,HOU,points,25.5,1,1
+Stephen Curry,GSW,HOU,pts_rebs_asts,35.5,1,1
+Stephen Curry,GSW,HOU,period_1_points,5.5,1,1
+Stephen Curry,GSW,HOU,rebounds,3.5,1,1
+Jimmy Butler,GSW,HOU,points,19.5,1,1
+Jimmy Butler,GSW,HOU,pts_rebs_asts,30.5,1,1
+Jimmy Butler,GSW,HOU,assists,5.5,1,1
+Jimmy Butler,GSW,HOU,rebounds,5.5,1,1
+Shai Gilgeous-Alexander,OKC,MIN,points,31.5,1,1
+Shai Gilgeous-Alexander,OKC,MIN,pts_rebs_asts,42.5,1,1
+Shai Gilgeous-Alexander,OKC,MIN,period_1_points,9.5,1,1
+Shai Gilgeous-Alexander,OKC,MIN,rebounds,4.5,1,1
+Chet Holmgren,OKC,MIN,points,13.5,1,1
+Chet Holmgren,OKC,MIN,pts_rebs_asts,22.5,1,1
+Chet Holmgren,OKC,MIN,assists,1.5,1,1
+Chet Holmgren,OKC,MIN,period_1_points,3.5,1,1
+Jalen Williams,OKC,MIN,points,19.5,1,1
+Jalen Williams,OKC,MIN,pts_rebs_asts,29.5,1,1
+Jalen Williams,OKC,MIN,period_1_points,3.5,1,1
+Jalen Williams,OKC,MIN,rebounds,4.5,1,1
+Lu Dort,OKC,MIN,points,8.5,1,1
+Lu Dort,OKC,MIN,pts_rebs_asts,13.5,1,1
+Lu Dort,OKC,MIN,period_1_points,2.5,1,1
+Lu Dort,OKC,MIN,assists,1.5,1,1
+Isaiah Hartenstein,OKC,MIN,points,8.5,1,1
+Isaiah Hartenstein,OKC,MIN,pts_rebs_asts,23.5,1,1
+Isaiah Hartenstein,OKC,MIN,rebounds,10.5,1,1
+Isaiah Hartenstein,OKC,MIN,period_1_points,1.5,1,1
