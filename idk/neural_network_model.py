@@ -1,3 +1,6 @@
+#dont use, reference only, model is messed up
+
+
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -5,7 +8,6 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-import itertools
 
 print("🚀 Loading datasets...")
 
@@ -63,79 +65,59 @@ print("✅ Data normalization complete.")
 
 # Build Neural Network with Dropout & Regularization
 print("🛠 Building neural network model...")
+
 model = keras.Sequential([
-    layers.Dense(64, activation="relu", kernel_regularizer=keras.regularizers.l2(0.01), input_shape=(len(features),)),
-    layers.Dropout(0.3),  # Dropout for regularization
-    layers.Dense(32, activation="relu", kernel_regularizer=keras.regularizers.l2(0.01)),
-    layers.Dropout(0.3),
+    layers.Dense(32, activation="relu", kernel_regularizer=keras.regularizers.l2(0.001), input_shape=(len(features),)),
+    layers.Dropout(0.5),  # Increased dropout for regularization
+    layers.Dense(16, activation="relu", kernel_regularizer=keras.regularizers.l2(0.001)),
+    layers.Dropout(0.5),  # Increased dropout for regularization
     layers.Dense(1, activation="sigmoid")  # Probability output
 ])
 
-model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001), loss="binary_crossentropy", metrics=["accuracy"])
+model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.0001), loss="binary_crossentropy", metrics=["accuracy"])
 print("✅ Model built successfully.")
 
-# Early Stopping Callback
-early_stopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
+# Early Stopping Callback with increased patience
+early_stopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
 print("🏋️ Training model...")
-model.fit(X_train, y_train, epochs=5, batch_size=32, validation_data=(X_test, y_test), callbacks=[early_stopping])
+model.fit(X_train, y_train, epochs=2, batch_size=32, validation_data=(X_test, y_test), callbacks=[early_stopping])
 print("✅ Model training complete.")
 
-# Predict probabilities
+# Generate prop predictions for Over
 print("📊 Generating prop predictions...")
 merged_data["P(over)"] = model.predict(scaler.transform(merged_data[features]))
-merged_data["P(under)"] = 1 - merged_data["P(over)"]
-print("✅ Predictions generated.")
 
-# Compute expected values (EV) for both Over and Under
+# Calculate the probability for Under as the complement of Over
+merged_data["P(under)"] = 1 - merged_data["P(over)"]
+
+# Compare predicted probability with prop line to determine Over or Under
+# If the predicted probability is greater than the prop line, predict Over, else Under
+merged_data['Predicted Outcome'] = np.where(merged_data['P(over)'] > merged_data['Prop Line'], 'Over', 'Under')
+
+# Calculate EV for Over and Under based on the predictions
 print("📊 Calculating expected values (EV)...")
+
+# Calculate EV for Over (payout if Over is predicted and it happens)
 merged_data["EV_over"] = (
-    merged_data["P(over)"] * (merged_data["Higher Payout"] - 1) - 
-    (1 - merged_data["P(over)"]) * 1  # Losing amount is the $1 bet
+    merged_data["P(over)"] * (merged_data["Higher Payout"] + 1) - merged_data["P(under)"]  # Losing amount is the $1 bet for Under
 )
+
+# Calculate EV for Under (payout if Under is predicted and it happens)
 merged_data["EV_under"] = (
-    merged_data["P(under)"] * (merged_data["Lower Payout"] - 1) - 
-    (1 - merged_data["P(under)"]) * 1  # Losing amount is the $1 bet
+    merged_data["P(under)"] * (merged_data["Lower Payout"] + 1) - merged_data["P(over)"]  # Losing amount is the $1 bet for Over
 )
 
 print("✅ EV calculations complete.")
 
-# Function to calculate parlay EV
-def calculate_parlay_ev(props):
-    probabilities = [prop['P(over)'] if prop['Stat Type'] == 'Over' else prop['P(under)'] for prop in props]
-    payouts = [prop['Higher Payout'] if prop['Stat Type'] == 'Over' else prop['Lower Payout'] for prop in props]
-    
-    # Check if any payout is invalid (NaN or None)
-    if any(pd.isna(payout) or payout is None for payout in payouts):
-        return None  # Return None if there's an invalid payout
+# Create a new DataFrame with EV appended
+prop_data_with_ev = prop_data.copy()
+prop_data_with_ev["EV_over"] = merged_data["EV_over"]
+prop_data_with_ev["EV_under"] = merged_data["EV_under"]
 
-    # Parlay hit probability: product of individual prop hit probabilities
-    parlay_hit_prob = np.prod(probabilities)
-    
-    # Parlay payout: product of individual prop payouts (payouts are already numeric)
-    parlay_payout = np.prod([payout - 1 for payout in payouts])
-    
-    # EV calculation for parlay
-    parlay_ev = (parlay_hit_prob * parlay_payout) - (1 - parlay_hit_prob)
-    return parlay_ev
+# Save prop EVs to CSV
+prop_data_with_ev[['Player', 'Stat Type', 'EV_over', 'EV_under']].to_csv("prop_ev_results.csv", index=False)
+print("✅ Prop EV results saved as 'prop_ev_results.csv'.")
 
-# Generating parlays for 2 to 6 props
-parlay_results = []
-for n in range(2, 7):  # For parlays of 2, 3, 4, 5, 6 props
-    for combination in itertools.combinations(merged_data.to_dict(orient='records'), n):
-        parlay_ev = calculate_parlay_ev(combination)
-        parlay_results.append({
-            'Combination': combination,
-            'Parlay EV': parlay_ev
-        })
-
-# Convert to DataFrame for output
-parlay_results_df = pd.DataFrame(parlay_results)
-print("📋 Parlay EV calculations complete.")
-
-# Save parlay results to CSV
-parlay_results_df.to_csv("parlay_ev_results.csv", index=False)
-print("✅ Parlay EV results saved as 'parlay_ev_results.csv'.")
-
-# Sample of parlay EV results
-print(parlay_results_df.head())
+# Sample of prop EV results
+print(prop_data_with_ev.head())
