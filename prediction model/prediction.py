@@ -8,11 +8,11 @@ from unidecode import unidecode  # Normalize names
 print("Loading CSV files...")
 
 # Load CSV files
-underdog_df = pd.read_csv(r"c:/Users/jeffr/sports/Sports-Gambling/underdog_player_props_fixed.csv")
-nba_logs_df = pd.read_csv(r"c:/Users/jeffr/sports/Sports-Gambling/nba_players_game_logs_2018_25.csv")
+underdog_df = pd.read_csv("underdog.csv")
+nba_logs_df = pd.read_csv("nba_players_game_logs_2018_25.csv")
 nba_logs_df.columns = nba_logs_df.columns.str.strip().str.upper()
 nba_logs_df = nba_logs_df.loc[:, ~nba_logs_df.columns.duplicated()]
-correlations_df = pd.read_csv(r"c:/Users/jeffr/sports/Sports-Gambling/top_teammate_correlations_filtered.csv")
+correlations_df = pd.read_csv("top_teammate_correlations_filtered.csv")
 
 print("Preprocessing data...")
 
@@ -36,16 +36,16 @@ underdog_df['Lower Payout'] = underdog_df['Lower Payout'].apply(parse_numeric)
 
 # Mapping props to stats
 def map_prop_to_stats(prop_type):
-    if "Pts + Rebs + Asts" in prop_type:
+    if "period_1" in prop_type:
+        return []
+    elif "pts_rebs_asts" in prop_type:
         return ["PTS", "REB", "AST"]
-    elif "Points" in prop_type:
+    elif "points" in prop_type:
         return ["PTS"]
-    elif "Rebounds" in prop_type:
+    elif "rebounds" in prop_type:
         return ["REB"]
-    elif "Assists" in prop_type:
+    elif "assists" in prop_type:
         return ["AST"]
-    elif "1Q Points" in prop_type:
-        return ["PTS"]
     else:
         return []
 
@@ -74,13 +74,15 @@ for idx, row in underdog_df.iterrows():
     prop_line = row['Prop Line']
     payout_high = row['Higher Payout']
     payout_low = row['Lower Payout']
-
+    current_team = row['Current Team']
+    opponent_team = row['Opponent Team']
     stats = map_prop_to_stats(stat_type)
     if not stats:
         continue
 
     player_logs = nba_logs_df[nba_logs_df['PLAYER_NAME'] == player]
     if player_logs.empty:
+        print(f"no values for {player}")
         continue
 
     # Get the seasons
@@ -170,7 +172,7 @@ best_props_df = prop_results_df.sort_values("EV", ascending=False).groupby("Play
 
 # Store prop EVs, probabilities, and directions to CSV
 prop_data_df = pd.DataFrame(prop_data)
-prop_data_output_file = r"c:/Users/jeffr/sports/Sports-Gambling/prediction model/prop_data.csv"
+prop_data_output_file = "prediction model/prop_data.csv"
 prop_data_df.to_csv(prop_data_output_file, index=False)
 
 print(f"Prop data saved to {prop_data_output_file}")
@@ -181,13 +183,13 @@ parlay_multiplier = {2: 3, 3: 6, 4: 10, 5: 20, 6: 35, 7: 65, 8: 120}
 players_best = best_props_df.to_dict('records')
 
 # File paths
-output_file = r"c:/Users/jeffr/sports/Sports-Gambling/prediction model/parlay_analysis_live.csv"
-sorted_output_file = r"c:/Users/jeffr/sports/Sports-Gambling/prediction model/parlay_analysis_sorted.csv"
+output_file = "prediction model/parlay_analysis_live.csv"
+sorted_output_file = "prediction model/parlay_analysis_sorted.csv"
 
 print("Calculating parlays for best player props...")
 
 parlay_results = []
-top_props = prop_results_df.sort_values("EV", ascending=False).head(15)  # Consider top 20 bets
+top_props = prop_results_df.sort_values("EV", ascending=False).head(15)  # Consider top 15 bets
 print(f"Total props considered for parlays: {len(top_props)}")
 print(top_props[['Player', 'EV', 'Probability_Hit']].head(15))
 
