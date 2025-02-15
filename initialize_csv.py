@@ -20,11 +20,24 @@ HEADERS = {
 # The season range we need
 SEASONS = ["2018-19", "2019-20", "2020-21", "2021-22", "2022-23", "2023-24", "2024-25"]
 
+# Ask user for season type
+while True:
+    season_type = input("Enter season type (Regular Season or Playoffs): ").strip()
+    if season_type in ["Regular Season", "Playoffs"]:
+        break
+    print("Invalid input. Please enter 'Regular Season' or 'Playoffs'.")
+
+# Determine the correct filename
+if season_type == "Regular Season":
+    csv_file = "nba_players_game_logs_2018_25.csv"
+else:
+    csv_file = "nba_players_game_logs_2018_25_playoffs.csv"
+
 # Step 1: Get All Players Who Played in 2024-2025 (active players in the current season)
 params = {
     "LeagueID": "00",
-    "Season": "2024-25",  # Get the latest season's players
-    "IsOnlyCurrentSeason": "1"  # Fetch only current active players
+    "Season": "2024-25",
+    "IsOnlyCurrentSeason": "1"
 }
 
 response = requests.get(NBA_PLAYER_LIST_URL, headers=HEADERS, params=params)
@@ -40,27 +53,26 @@ if response.status_code == 200:
     # Extract Player IDs & Names (active players only)
     player_ids = players_df[["PERSON_ID", "DISPLAY_FIRST_LAST"]].drop_duplicates()
     player_ids.columns = ["PLAYER_ID", "PLAYER_NAME"]
-    
+
     print(f"Successfully fetched {len(player_ids)} players!")
 else:
     print(f"Failed to fetch player list. HTTP Status Code: {response.status_code}")
     exit()
 
 # Step 2: Prepare CSV file for appending data
-csv_file = "nba_players_game_logs_2018_25.csv"
-header_written = False  # To keep track if header is already written in CSV
+header_written = False  # Track if header is already written in CSV
 
 # Check if the CSV file exists
 if os.path.exists(csv_file):
     # Read the last row from the existing CSV to find the last processed player
-    existing_df = pd.read_csv(csv_file)
+    existing_df = pd.read_csv(csv_file, low_memory=False)
     last_player_name = existing_df["Player_Name"].iloc[-1]
     
     # Find index of the last player in player_ids to start from the next player
     start_index = player_ids[player_ids["PLAYER_NAME"] == last_player_name].index[0] + 1
     print(f"Resuming from player: {last_player_name}")
 else:
-    start_index = 0  # If the file doesn't exist, start from the beginning
+    start_index = 0
     print("Starting from the first player.")
 
 # Step 3: Fetch Game Logs for Each Player
@@ -72,7 +84,7 @@ for player_id, player_name in player_ids.iloc[start_index:].itertuples(index=Fal
             "PlayerID": player_id,
             "LeagueID": "00",
             "Season": season,
-            "SeasonType": "Regular Season"
+            "SeasonType": season_type  # User-selected season type
         }
 
         response = requests.get(NBA_GAME_LOGS_URL, headers=HEADERS, params=params)
@@ -90,7 +102,7 @@ for player_id, player_name in player_ids.iloc[start_index:].itertuples(index=Fal
 
                 # Append data to CSV as we go
                 df.to_csv(csv_file, mode='a', header=not header_written, index=False)
-                header_written = True  # After first append, set header_written to True
+                header_written = True
 
         # Prevent API blocking
         time.sleep(1)
