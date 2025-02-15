@@ -111,7 +111,7 @@ for idx, row in underdog_df.iterrows():
         continue
 
     # Calculate the combined mean and standard deviation
-    total_mean = np.mean(stat_means)
+    total_mean = np.sum(stat_means)
     total_var = np.sum(stat_vars)  # Variance is summed up for independent stats
     total_std = np.sqrt(total_var) if total_var > 0 else 0.0
 
@@ -184,7 +184,8 @@ players_best = best_props_df.to_dict('records')
 
 # File paths
 output_file = "prediction model/parlay_analysis_live.csv"
-sorted_output_file = "prediction model/parlay_analysis_sorted.csv"
+sorted_output_file = "prediction model/parlay_analysis_sorted_prob.csv"
+sorted_output_file2 = "prediction model/parlay_analysis_sorted_ev.csv"
 
 print("Calculating parlays for best player props...")
 
@@ -242,5 +243,7 @@ with open(output_file, "w", newline="") as f:
 parlay_results_df = pd.DataFrame(parlay_results)
 parlay_results_df_sorted = parlay_results_df.sort_values("Combined Probability", ascending=False)
 parlay_results_df_sorted.to_csv(sorted_output_file, index=False)
+parlay_results_df_sorted = parlay_results_df.sort_values("Parlay EV", ascending=False)
+parlay_results_df_sorted.to_csv(sorted_output_file2, index=False)
 
 print("Parlay analysis completed.")
