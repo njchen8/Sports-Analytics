@@ -34,7 +34,7 @@ stat_mapping = {
     "pts_rebs_asts": ["PTS", "REB", "AST"]
 }
 
-def predict_stat_with_variance(player_name, opponent_team, stat, player_data):
+def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     """
     Predicts a player's expected value and variance for a given stat using the last 25 valid matches.
     """
@@ -59,12 +59,22 @@ def predict_stat_with_variance(player_name, opponent_team, stat, player_data):
     if player_df.empty:
         return np.nan, np.nan, ""
 
+    # Determine player's current team from the most recent game
+    most_recent_game = player_df.iloc[-1]
+    player_team = most_recent_game['TEAM_ABBREVIATION']
+
     # Calculate date range
     date_range = f"{player_df['GAME_DATE'].min().date()} to {player_df['GAME_DATE'].max().date()}"
     if 'NaT' in date_range:
         return np.nan, np.nan, ""
 
-    # Calculate weights based on recency and home/away performance
+    # Identify the opponent team
+    if player_team == prop_row['Current Team']:
+        opponent_team = prop_row['Opponent Team']
+    else:
+        opponent_team = prop_row['Current Team']
+
+    # Calculate weights based on recency and correct opponent team
     player_df['recent_weight'] = np.exp(-np.arange(len(player_df))[::-1] / 3)
     player_df['home_weight'] = np.where(player_df['MATCHUP'].str.contains('@'), 0.8, 1.2)
     player_df['same_team_weight'] = np.where(player_df['MATCHUP'].str.contains(opponent_team), 1.5, 1.0)
@@ -84,8 +94,10 @@ def predict_stat_with_variance(player_name, opponent_team, stat, player_data):
                     try:
                         model = ARIMA(player_df.set_index('GAME_DATE')[stat].asfreq('D', method='pad'), order=(p, d, q))
                         fit = model.fit()
-                        if fit.aic < best_aic:
-                            best_aic = fit.aic
+                        residuals = fit.resid
+                        mse = np.mean(residuals**2)
+                        if mse < best_aic:
+                            best_aic = mse
                             best_model = fit
                     except Exception as e:
                         continue
@@ -103,7 +115,6 @@ predictions = []
 
 for _, row in props_df.iterrows():
     player_name = row['Player']
-    opponent_team = row['Opponent Team']
     stat_type = row['Stat Type'].lower()
 
     stat_cols = stat_mapping.get(stat_type)
@@ -115,7 +126,7 @@ for _, row in props_df.iterrows():
         variance_total = 0
         date_range = ""
         for stat_col in stat_cols:
-            pred_value, var_value, dr = predict_stat_with_variance(player_name, opponent_team, stat_col, logs_df)
+            pred_value, var_value, dr = predict_stat_with_variance(player_name, stat_col, logs_df, row)
             if not np.isnan(pred_value):
                 predicted_total += pred_value
             if not np.isnan(var_value):
@@ -125,7 +136,8 @@ for _, row in props_df.iterrows():
         if date_range:
             predictions.append({
                 "Player": player_name,
-                "Opponent": opponent_team,
+                "Current Team": row['Current Team'],
+                "Opponent Team": row['Opponent Team'],
                 "Stat Type": "pts_rebs_asts",
                 "Prop Line": row["Prop Line"],
                 "Predicted Value": round(predicted_total, 2),
@@ -133,12 +145,13 @@ for _, row in props_df.iterrows():
                 "Date Range": date_range
             })
     else:
-        predicted_value, variance_value, date_range = predict_stat_with_variance(player_name, opponent_team, stat_cols, logs_df)
+        predicted_value, variance_value, date_range = predict_stat_with_variance(player_name, stat_cols, logs_df, row)
 
         if date_range:
             predictions.append({
                 "Player": player_name,
-                "Opponent": opponent_team,
+                "Current Team": row['Current Team'],
+                "Opponent Team": row['Opponent Team'],
                 "Stat Type": stat_type,
                 "Prop Line": row["Prop Line"],
                 "Predicted Value": predicted_value,
