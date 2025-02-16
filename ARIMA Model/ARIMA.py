@@ -9,8 +9,8 @@ logs_file_path = "nba_players_game_logs_2018_25.csv"
 props_df = pd.read_csv(props_file_path, low_memory=False)
 logs_df = pd.read_csv(logs_file_path, low_memory=False)
 
-# Convert GAME_DATE to datetime
-logs_df['GAME_DATE'] = pd.to_datetime(logs_df['GAME_DATE'], errors='coerce')
+# Convert GAME_DATE to datetime with specific format
+logs_df['GAME_DATE'] = pd.to_datetime(logs_df['GAME_DATE'], format='%Y-%m-%dT%H:%M:%S', errors='coerce')
 
 # Ensure key stat columns are numeric
 stats_columns = ['PTS', 'REB', 'AST']
@@ -18,15 +18,9 @@ for col in stats_columns:
     logs_df[col] = pd.to_numeric(logs_df[col], errors='coerce')
 
 # Filter out invalid data: remove outliers and games with less than 5 minutes
-# Convert 'MIN' column to numeric, forcing errors to become NaN
 logs_df['MIN'] = pd.to_numeric(logs_df['MIN'], errors='coerce')
-
-# Drop rows where 'MIN' is NaN before filtering
 logs_df = logs_df.dropna(subset=['MIN'])
-
-# Now apply the filter
 logs_df = logs_df[logs_df['MIN'] >= 5]
-
 for col in stats_columns:
     mean = logs_df[col].mean()
     std = logs_df[col].std()
@@ -46,22 +40,35 @@ def predict_stat_with_variance(player_name, opponent_team, stat, player_data):
     """
 
     if stat not in player_data.columns:
-        return np.nan, np.nan
+        return np.nan, np.nan, ""
 
     # Filter data for the player
     player_df = player_data[player_data['PLAYER_NAME'] == player_name].copy()
-    player_df = player_df.sort_values(by="GAME_DATE").tail(25)
+    player_df = player_df.sort_values(by="GAME_DATE")
+
+    # Ensure the last 25 matches span a reasonable time period
+    if len(player_df) > 25:
+        time_span = (player_df['GAME_DATE'].iloc[-1] - player_df['GAME_DATE'].iloc[-25]).days
+        if time_span > 180:  # Ensure matches are within the last 6 months
+            player_df = player_df[player_df['GAME_DATE'] >= player_df['GAME_DATE'].iloc[-25]]
+    player_df = player_df.tail(25)
 
     # Drop NaNs for the specific stat
     player_df = player_df.dropna(subset=[stat])
 
     if player_df.empty:
-        return np.nan, np.nan
+        return np.nan, np.nan, ""
+
+    # Calculate date range
+    date_range = f"{player_df['GAME_DATE'].min().date()} to {player_df['GAME_DATE'].max().date()}"
+    if 'NaT' in date_range:
+        return np.nan, np.nan, ""
 
     # Calculate weights based on recency and home/away performance
-    player_df['recent_weight'] = np.exp(-np.arange(len(player_df))[::-1] / 5)
+    player_df['recent_weight'] = np.exp(-np.arange(len(player_df))[::-1] / 3)
     player_df['home_weight'] = np.where(player_df['MATCHUP'].str.contains('@'), 0.8, 1.2)
-    player_df['combined_weight'] = player_df['recent_weight'] * player_df['home_weight']
+    player_df['same_team_weight'] = np.where(player_df['MATCHUP'].str.contains(opponent_team), 1.5, 1.0)
+    player_df['combined_weight'] = player_df['recent_weight'] * player_df['home_weight'] * player_df['same_team_weight']
 
     # Calculate weighted mean and variance
     weighted_mean = np.average(player_df[stat], weights=player_df['combined_weight'])
@@ -69,16 +76,27 @@ def predict_stat_with_variance(player_name, opponent_team, stat, player_data):
 
     # Apply ARIMA model if sufficient data
     if len(player_df) >= 10:
-        arima_model = ARIMA(player_df[stat], order=(2, 1, 2))
-        arima_fit = arima_model.fit()
-        arima_forecast = arima_fit.forecast(steps=1).iloc[0]
+        best_model = None
+        best_aic = float('inf')
+        for p in range(1, 4):
+            for d in range(1, 3):
+                for q in range(1, 4):
+                    try:
+                        model = ARIMA(player_df.set_index('GAME_DATE')[stat].asfreq('D', method='pad'), order=(p, d, q))
+                        fit = model.fit()
+                        if fit.aic < best_aic:
+                            best_aic = fit.aic
+                            best_model = fit
+                    except Exception as e:
+                        continue
+        arima_forecast = best_model.forecast(steps=1).iloc[0] if best_model else weighted_mean
     else:
         arima_forecast = weighted_mean
 
     # Final prediction: weighted combination of historical performance and ARIMA forecast
     final_prediction = 0.6 * weighted_mean + 0.4 * arima_forecast
 
-    return round(final_prediction, 2), round(weighted_variance, 2)
+    return round(final_prediction, 2), round(weighted_variance, 2), date_range
 
 # Create a dictionary to store predictions for each player and stat
 predictions = []
@@ -95,39 +113,44 @@ for _, row in props_df.iterrows():
     if isinstance(stat_cols, list):  # For combined stats like pts_rebs_asts
         predicted_total = 0
         variance_total = 0
+        date_range = ""
         for stat_col in stat_cols:
-            pred_value, var_value = predict_stat_with_variance(player_name, opponent_team, stat_col, logs_df)
+            pred_value, var_value, dr = predict_stat_with_variance(player_name, opponent_team, stat_col, logs_df)
             if not np.isnan(pred_value):
                 predicted_total += pred_value
             if not np.isnan(var_value):
                 variance_total += var_value
+            date_range = dr
 
-        predictions.append({
-            "Player": player_name,
-            "Opponent": opponent_team,
-            "Stat Type": "pts_rebs_asts",
-            "Prop Line": row["Prop Line"],
-            "Predicted Value": round(predicted_total, 2),
-            "Variance": round(variance_total, 2)
-        })
+        if date_range:
+            predictions.append({
+                "Player": player_name,
+                "Opponent": opponent_team,
+                "Stat Type": "pts_rebs_asts",
+                "Prop Line": row["Prop Line"],
+                "Predicted Value": round(predicted_total, 2),
+                "Variance": round(variance_total, 2),
+                "Date Range": date_range
+            })
     else:
-        predicted_value, variance_value = predict_stat_with_variance(player_name, opponent_team, stat_cols, logs_df)
+        predicted_value, variance_value, date_range = predict_stat_with_variance(player_name, opponent_team, stat_cols, logs_df)
 
-        predictions.append({
-            "Player": player_name,
-            "Opponent": opponent_team,
-            "Stat Type": stat_type,
-            "Prop Line": row["Prop Line"],
-            "Predicted Value": predicted_value,
-            "Variance": variance_value
-        })
+        if date_range:
+            predictions.append({
+                "Player": player_name,
+                "Opponent": opponent_team,
+                "Stat Type": stat_type,
+                "Prop Line": row["Prop Line"],
+                "Predicted Value": predicted_value,
+                "Variance": variance_value,
+                "Date Range": date_range
+            })
 
-# Convert to DataFrame
+# Convert to DataFrame and save
 predictions_df = pd.DataFrame(predictions)
 
-# Save predictions
 if not predictions_df.empty:
-    predictions_df.to_csv("optimized_player_props.csv", index=False)
-    print("Predictions successfully saved to optimized_player_props.csv")
+    predictions_df.to_csv("player_expected_values.csv", index=False)
+    print("Expected values and variances saved to player_expected_values.csv")
 else:
     print("No valid predictions were generated.")

@@ -3,8 +3,7 @@ import numpy as np
 from scipy.stats import norm
 
 # Load data files
-
-props = pd.read_csv('optimized_player_props.csv')
+props = pd.read_csv('player_expected_values.csv')
 
 # Calculate probabilities for over and under based on given lines and expected values
 parlays = []
@@ -32,7 +31,8 @@ for _, row in props.iterrows():
         'stat': row['Stat Type'],
         'line': line,
         'best_bet': best_choice,
-        'probability': best_prob
+        'probability': best_prob,
+        'expected_value': row['Predicted Value']
     })
 
 # Convert to DataFrame and sort by highest probability
