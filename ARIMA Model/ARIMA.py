@@ -102,7 +102,7 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
 
     # Calculate weighted mean and variance without log transform
     weighted_mean = np.average(player_df[stat], weights=player_df['combined_weight'])
-    weighted_variance = np.average((player_df[stat] - weighted_mean) ** 2, weights=player_df['combined_weight'])
+    weighted_variance = np.average((player_df[stat] - weighted_mean) ** 2)
 
     # Apply ARIMA model if sufficient data
     if len(player_df) >= 10:
