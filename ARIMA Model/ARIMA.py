@@ -3,6 +3,7 @@ import numpy as np
 from statsmodels.tsa.arima.model import ARIMA
 import warnings
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
+from datetime import datetime, timedelta
 
 # Load datasets with low_memory=False to avoid dtype warnings
 props_file_path = "underdog_home_team_props.csv"
@@ -79,6 +80,11 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     if 'NaT' in date_range:
         return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
+    # Check if the player has played in the last 2 weeks
+    last_game_date = player_df['GAME_DATE'].max()
+    if (datetime.now() - last_game_date) > timedelta(days=14):
+        return np.nan, np.nan, "", np.nan, np.nan, np.nan
+
     # Identify the opponent team correctly
     player_team = player_df.iloc[-1]['TEAM_ABBREVIATION']
     teams = {prop_row['Current Team'], prop_row['Opponent Team']}
@@ -118,10 +124,16 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
                         continue
         if best_model:
             arima_forecast = best_model.forecast(steps=1).iloc[0]
+            # Discard ARIMA predictions more than 1 SD away from the weighted mean
+            if abs(arima_forecast - weighted_mean) > std:
+                arima_forecast = weighted_mean
+                print("more than SD away")
         else:
             arima_forecast = weighted_mean
+            print("no model")
     else:
         arima_forecast = weighted_mean
+        print("not enough data")
 
     # Calculate weighted combination of weighted mean and ARIMA forecast
     weighted_combination = 0.5 * weighted_mean + 0.5 * arima_forecast

@@ -8,7 +8,7 @@ props = pd.read_csv('player_expected_values.csv')
 # Calculate probabilities for over and under based on given lines and expected values
 parlays = []
 for _, row in props.iterrows():
-    mean = row['Predicted Value']
+    mean = row['Weighted Combination']
     line = row['Prop Line']
     std_dev = np.sqrt(row['Variance'])
 
@@ -32,7 +32,8 @@ for _, row in props.iterrows():
         'line': line,
         'best_bet': best_choice,
         'probability': best_prob,
-        'expected_value': row['Predicted Value']
+
+        'Weighted Average': row['Weighted Mean']
     })
 
 # Convert to DataFrame and sort by highest probability
