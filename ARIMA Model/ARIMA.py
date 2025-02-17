@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from statsmodels.tsa.arima.model import ARIMA
+import warnings
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
 
 # Load datasets with low_memory=False to avoid dtype warnings
 props_file_path = "underdog_home_team_props.csv"
@@ -17,11 +19,14 @@ stats_columns = ['PTS', 'REB', 'AST']
 for col in stats_columns:
     logs_df[col] = pd.to_numeric(logs_df[col], errors='coerce')
 
+# Calculate pts_rebs_asts accurately
+logs_df['PTS_REB_AST'] = logs_df['PTS'] + logs_df['REB'] + logs_df['AST']
+
 # Filter out invalid data: remove outliers and games with less than 5 minutes
 logs_df['MIN'] = pd.to_numeric(logs_df['MIN'], errors='coerce')
 logs_df = logs_df.dropna(subset=['MIN'])
 logs_df = logs_df[logs_df['MIN'] >= 5]
-for col in stats_columns:
+for col in stats_columns + ['PTS_REB_AST']:
     mean = logs_df[col].mean()
     std = logs_df[col].std()
     logs_df = logs_df[(logs_df[col] >= mean - 3 * std) & (logs_df[col] <= mean + 3 * std)]
@@ -31,8 +36,12 @@ stat_mapping = {
     "points": "PTS",
     "rebounds": "REB",
     "assists": "AST",
-    "pts_rebs_asts": ["PTS", "REB", "AST"]
+    "pts_rebs_asts": "PTS_REB_AST"
 }
+
+# Suppress ARIMA warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     """
@@ -40,7 +49,7 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     """
 
     if stat not in player_data.columns:
-        return np.nan, np.nan, ""
+        return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
     # Filter data for the player
     player_df = player_data[player_data['PLAYER_NAME'] == player_name].copy()
@@ -57,22 +66,27 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     player_df = player_df.dropna(subset=[stat])
 
     if player_df.empty:
-        return np.nan, np.nan, ""
+        return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
-    # Determine player's current team from the most recent game
-    most_recent_game = player_df.iloc[-1]
-    player_team = most_recent_game['TEAM_ABBREVIATION']
+    # Remove outliers and games with less than 5 minutes from ARIMA model
+    player_df = player_df[player_df['MIN'] >= 5]
+    mean = player_df[stat].mean()
+    std = player_df[stat].std()
+    player_df = player_df[(player_df[stat] >= mean - 3 * std) & (player_df[stat] <= mean + 3 * std)]
 
     # Calculate date range
     date_range = f"{player_df['GAME_DATE'].min().date()} to {player_df['GAME_DATE'].max().date()}"
     if 'NaT' in date_range:
-        return np.nan, np.nan, ""
+        return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
-    # Identify the opponent team
-    if player_team == prop_row['Current Team']:
-        opponent_team = prop_row['Opponent Team']
+    # Identify the opponent team correctly
+    player_team = player_df.iloc[-1]['TEAM_ABBREVIATION']
+    teams = {prop_row['Current Team'], prop_row['Opponent Team']}
+    if player_team in teams:
+        current_team = player_team
+        opponent_team = (teams - {player_team}).pop()
     else:
-        opponent_team = prop_row['Current Team']
+        return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
     # Calculate weights based on recency and correct opponent team
     player_df['recent_weight'] = np.exp(-np.arange(len(player_df))[::-1] / 3)
@@ -80,7 +94,7 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     player_df['same_team_weight'] = np.where(player_df['MATCHUP'].str.contains(opponent_team), 1.5, 1.0)
     player_df['combined_weight'] = player_df['recent_weight'] * player_df['home_weight'] * player_df['same_team_weight']
 
-    # Calculate weighted mean and variance
+    # Calculate weighted mean and variance without log transform
     weighted_mean = np.average(player_df[stat], weights=player_df['combined_weight'])
     weighted_variance = np.average((player_df[stat] - weighted_mean) ** 2, weights=player_df['combined_weight'])
 
@@ -92,23 +106,27 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
             for d in range(1, 3):
                 for q in range(1, 4):
                     try:
-                        model = ARIMA(player_df.set_index('GAME_DATE')[stat].asfreq('D', method='pad'), order=(p, d, q))
+                        player_df['game_index'] = np.arange(len(player_df))
+                        model = ARIMA(player_df.set_index('game_index')[stat], order=(p, d, q), enforce_stationarity=False, enforce_invertibility=False)
                         fit = model.fit()
                         residuals = fit.resid
                         mse = np.mean(residuals**2)
                         if mse < best_aic:
                             best_aic = mse
                             best_model = fit
-                    except Exception as e:
+                    except Exception:
                         continue
-        arima_forecast = best_model.forecast(steps=1).iloc[0] if best_model else weighted_mean
+        if best_model:
+            arima_forecast = best_model.forecast(steps=1).iloc[0]
+        else:
+            arima_forecast = weighted_mean
     else:
         arima_forecast = weighted_mean
 
-    # Final prediction: weighted combination of historical performance and ARIMA forecast
-    final_prediction = 0.6 * weighted_mean + 0.4 * arima_forecast
+    # Calculate weighted combination of weighted mean and ARIMA forecast
+    weighted_combination = 0.5 * weighted_mean + 0.5 * arima_forecast
 
-    return round(final_prediction, 2), round(weighted_variance, 2), date_range
+    return round(arima_forecast, 2), round(weighted_variance, 2), date_range, weighted_mean, arima_forecast, round(weighted_combination, 2)
 
 # Create a dictionary to store predictions for each player and stat
 predictions = []
@@ -117,53 +135,38 @@ for _, row in props_df.iterrows():
     player_name = row['Player']
     stat_type = row['Stat Type'].lower()
 
-    stat_cols = stat_mapping.get(stat_type)
-    if stat_cols is None:
+    stat_col = stat_mapping.get(stat_type)
+    if stat_col is None:
         continue
 
-    if isinstance(stat_cols, list):  # For combined stats like pts_rebs_asts
-        predicted_total = 0
-        variance_total = 0
-        date_range = ""
-        for stat_col in stat_cols:
-            pred_value, var_value, dr = predict_stat_with_variance(player_name, stat_col, logs_df, row)
-            if not np.isnan(pred_value):
-                predicted_total += pred_value
-            if not np.isnan(var_value):
-                variance_total += var_value
-            date_range = dr
+    if not logs_df[logs_df['PLAYER_NAME'] == player_name].empty:
+        predicted_value, variance_value, date_range, mean_val, arima_val, weighted_combination = predict_stat_with_variance(player_name, stat_col, logs_df, row)
 
         if date_range:
+            player_team = logs_df[logs_df['PLAYER_NAME'] == player_name].sort_values(by="GAME_DATE").iloc[-1]['TEAM_ABBREVIATION']
+            opponent_team = row['Opponent Team'] if row['Current Team'] == player_team else row['Current Team']
             predictions.append({
                 "Player": player_name,
-                "Current Team": row['Current Team'],
-                "Opponent Team": row['Opponent Team'],
-                "Stat Type": "pts_rebs_asts",
-                "Prop Line": row["Prop Line"],
-                "Predicted Value": round(predicted_total, 2),
-                "Variance": round(variance_total, 2),
-                "Date Range": date_range
-            })
-    else:
-        predicted_value, variance_value, date_range = predict_stat_with_variance(player_name, stat_cols, logs_df, row)
-
-        if date_range:
-            predictions.append({
-                "Player": player_name,
-                "Current Team": row['Current Team'],
-                "Opponent Team": row['Opponent Team'],
+                "Current Team": player_team,
+                "Opponent Team": opponent_team,
                 "Stat Type": stat_type,
                 "Prop Line": row["Prop Line"],
                 "Predicted Value": predicted_value,
                 "Variance": variance_value,
-                "Date Range": date_range
+                "Date Range": date_range,
+                "Weighted Mean": mean_val,
+                "ARIMA Forecast": arima_val,
+                "Weighted Combination": weighted_combination
             })
 
 # Convert to DataFrame and save
 predictions_df = pd.DataFrame(predictions)
 
+# Sort predictions by ARIMA forecast and weighted mean
+predictions_df = predictions_df.sort_values(by=["ARIMA Forecast", "Weighted Mean"], ascending=[False, False])
+
 if not predictions_df.empty:
     predictions_df.to_csv("player_expected_values.csv", index=False)
     print("Expected values and variances saved to player_expected_values.csv")
 else:
-    print("No valid predictions were generated.")
+    print("No valid predictions were generated")
