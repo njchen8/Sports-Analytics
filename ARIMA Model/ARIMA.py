@@ -6,7 +6,7 @@ from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from datetime import datetime, timedelta
 
 # Load datasets with low_memory=False to avoid dtype warnings
-props_file_path = "underdog.csv"
+props_file_path = "fixed_data.csv"
 logs_file_path = "nba_players_game_logs_2018_25.csv"
 
 props_df = pd.read_csv(props_file_path, low_memory=False)
@@ -47,10 +47,14 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     """
     Predicts a player's expected value and variance for a given stat using the last 25 valid matches.
-    Variance is calculated on the past 25 matches filtered only by MIN >= 5 (without the 3 SD filter).
-    ARIMA modeling, weighted mean, and forecasts are computed on the same data after applying the 3 SD filter.
+    The function now incorporates a weighting system that adjusts for:
+      - Recency (exponential decay)
+      - Location: Whether the historical game was played in the same home/away context as the upcoming game.
+      - Opponent: A boost if the historical game was played against the same opponent as in the upcoming matchup.
+      
+    Variance is calculated on the past 25 matches (with only the MIN filter applied),
+    while the ARIMA modeling and weighted mean use an additional 3 SD filter.
     """
-
     if stat not in player_data.columns:
         return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
@@ -94,7 +98,7 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     if (datetime.now() - last_game_date) > timedelta(days=14):
         return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
-    # Identify the opponent team correctly
+    # Identify the opponent team using the prop data
     player_team = filtered_df.iloc[-1]['TEAM_ABBREVIATION']
     teams = {prop_row['Current Team'], prop_row['Opponent Team']}
     if player_team in teams:
@@ -102,31 +106,57 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     else:
         return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
-    # Calculate weights for the filtered data using .loc to avoid SettingWithCopyWarning
+    # Determine upcoming game location using prop file:
+    # If the player's current team equals the Home Team from props, the upcoming game is at home.
+    upcoming_home = True if prop_row["Current Team"] == prop_row["Home Team"] else False
+
+    # ----------------------------
+    # Calculate weights for the filtered data
+    # ----------------------------
+    # Recency weight: more recent games get higher weight
     filtered_df.loc[:, 'recent_weight'] = np.exp(-np.arange(len(filtered_df))[::-1] / 3)
-    filtered_df.loc[:, 'home_weight'] = np.where(filtered_df['MATCHUP'].str.contains('@'), 0.8, 1.2)
-    filtered_df.loc[:, 'same_team_weight'] = np.where(filtered_df['MATCHUP'].str.contains(opponent_team), 1.5, 1.0)
+    
+    # Location weight: assign a higher weight if the historical game matches the upcoming game condition
+    # For historical data, if MATCHUP contains '@', it's an away game; otherwise it's a home game.
+    if upcoming_home:
+        # Upcoming game is home; reward historical home games.
+        filtered_df.loc[:, 'location_weight'] = np.where(filtered_df['MATCHUP'].str.contains('@'), 0.8, 1.2)
+    else:
+        # Upcoming game is away; reward historical away games.
+        filtered_df.loc[:, 'location_weight'] = np.where(filtered_df['MATCHUP'].str.contains('@'), 1.2, 0.8)
+        
+    # Opponent weight: boost if historical game was played against the same opponent
+    filtered_df.loc[:, 'opponent_weight'] = np.where(filtered_df['MATCHUP'].str.contains(opponent_team), 1.5, 1.0)
+
+    # Combined weight is the product of recency, location, and opponent weights
     filtered_df.loc[:, 'combined_weight'] = (
-        filtered_df.loc[:, 'recent_weight'] *
-        filtered_df.loc[:, 'home_weight'] *
-        filtered_df.loc[:, 'same_team_weight']
+        filtered_df['recent_weight'] *
+        filtered_df['location_weight'] *
+        filtered_df['opponent_weight']
     )
 
     # Calculate weighted mean from the filtered data
     weighted_mean = np.average(filtered_df[stat], weights=filtered_df['combined_weight'])
 
-    # Calculate weighted variance using the unfiltered data (variance_df) with MIN filter only
+    # ----------------------------
+    # For variance, apply similar weights on variance_df (only filtered by MIN)
+    # ----------------------------
     variance_df.loc[:, 'recent_weight'] = np.exp(-np.arange(len(variance_df))[::-1] / 3)
-    variance_df.loc[:, 'home_weight'] = np.where(variance_df['MATCHUP'].str.contains('@'), 0.8, 1.2)
-    variance_df.loc[:, 'same_team_weight'] = np.where(variance_df['MATCHUP'].str.contains(opponent_team), 1.5, 1.0)
+    if upcoming_home:
+        variance_df.loc[:, 'location_weight'] = np.where(variance_df['MATCHUP'].str.contains('@'), 0.8, 1.2)
+    else:
+        variance_df.loc[:, 'location_weight'] = np.where(variance_df['MATCHUP'].str.contains('@'), 1.2, 0.8)
+    variance_df.loc[:, 'opponent_weight'] = np.where(variance_df['MATCHUP'].str.contains(opponent_team), 1.5, 1.0)
     variance_df.loc[:, 'combined_weight'] = (
-        variance_df.loc[:, 'recent_weight'] *
-        variance_df.loc[:, 'home_weight'] *
-        variance_df.loc[:, 'same_team_weight']
+        variance_df['recent_weight'] *
+        variance_df['location_weight'] *
+        variance_df['opponent_weight']
     )
     variance_value = np.average((variance_df[stat] - weighted_mean) ** 2, weights=variance_df['combined_weight'])
 
-    # Apply ARIMA model if sufficient data is available using the filtered data
+    # ----------------------------
+    # ARIMA modeling on the filtered data
+    # ----------------------------
     if len(filtered_df) >= 10:
         best_model = None
         best_aic = float('inf')
@@ -154,21 +184,19 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
             # Discard ARIMA predictions more than 1 SD away from the weighted mean
             if abs(arima_forecast - weighted_mean) > std_val:
                 arima_forecast = weighted_mean
-                print("more than SD away")
+                print("ARIMA forecast exceeded 1 SD from weighted mean; defaulting to weighted mean")
         else:
             arima_forecast = weighted_mean
-            print("no model")
+            print("No ARIMA model found; using weighted mean")
     else:
         arima_forecast = weighted_mean
-        print("not enough data")
+        print("Not enough data for ARIMA; using weighted mean")
 
     # Calculate weighted combination of weighted mean and ARIMA forecast
     weighted_combination = 0.5 * weighted_mean + 0.5 * arima_forecast
 
-    return round(arima_forecast, 2), round(variance_value, 2), date_range, weighted_mean, arima_forecast, round(weighted_combination, 2)
-
-
-
+    return (round(arima_forecast, 2), round(variance_value, 2), date_range,
+            weighted_mean, arima_forecast, round(weighted_combination, 2))
 
 # Create a dictionary to store predictions for each player and stat
 predictions = []
@@ -186,6 +214,7 @@ for _, row in props_df.iterrows():
 
         if date_range:
             player_team = logs_df[logs_df['PLAYER_NAME'] == player_name].sort_values(by="GAME_DATE").iloc[-1]['TEAM_ABBREVIATION']
+            # Determine opponent for the upcoming game based on prop data
             opponent_team = row['Opponent Team'] if row['Current Team'] == player_team else row['Current Team']
             predictions.append({
                 "Player": player_name,
@@ -201,7 +230,7 @@ for _, row in props_df.iterrows():
                 "Weighted Combination": weighted_combination
             })
 
-# Convert to DataFrame and save
+# Convert to DataFrame and save predictions
 predictions_df = pd.DataFrame(predictions)
 
 # Sort predictions by ARIMA forecast and weighted mean
