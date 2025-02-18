@@ -6,7 +6,7 @@ from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from datetime import datetime, timedelta
 
 # Load datasets with low_memory=False to avoid dtype warnings
-props_file_path = "underdog_home_team_props.csv"
+props_file_path = "underdog.csv"
 logs_file_path = "nba_players_game_logs_2018_25.csv"
 
 props_df = pd.read_csv(props_file_path, low_memory=False)
@@ -47,12 +47,14 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     """
     Predicts a player's expected value and variance for a given stat using the last 25 valid matches.
+    Variance is calculated on the past 25 matches filtered only by MIN >= 5 (without the 3 SD filter).
+    ARIMA modeling, weighted mean, and forecasts are computed on the same data after applying the 3 SD filter.
     """
 
     if stat not in player_data.columns:
         return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
-    # Filter data for the player
+    # Filter data for the player and sort by GAME_DATE
     player_df = player_data[player_data['PLAYER_NAME'] == player_name].copy()
     player_df = player_df.sort_values(by="GAME_DATE")
 
@@ -63,60 +65,85 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
             player_df = player_df[player_df['GAME_DATE'] >= player_df['GAME_DATE'].iloc[-25]]
     player_df = player_df.tail(25)
 
-    # Drop NaNs for the specific stat
+    # Drop NaNs for the specific stat and filter for games with at least 5 minutes
     player_df = player_df.dropna(subset=[stat])
+    player_df = player_df[player_df['MIN'] >= 5]
 
     if player_df.empty:
         return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
-    # Remove outliers and games with less than 5 minutes from ARIMA model
-    player_df = player_df[player_df['MIN'] >= 5]
-    mean = player_df[stat].mean()
-    std = player_df[stat].std()
-    player_df = player_df[(player_df[stat] >= mean - 3 * std) & (player_df[stat] <= mean + 3 * std)]
+    # Save a copy for variance calculation (only MIN filter applied)
+    variance_df = player_df.copy()
 
-    # Calculate date range
-    date_range = f"{player_df['GAME_DATE'].min().date()} to {player_df['GAME_DATE'].max().date()}"
+    # --- Now apply the 3 SD filter for ARIMA/weighted mean calculations ---
+    mean_val = player_df[stat].mean()
+    std_val = player_df[stat].std()
+    filtered_df = player_df[(player_df[stat] >= mean_val - 3 * std_val) &
+                             (player_df[stat] <= mean_val + 3 * std_val)].copy()
+
+    if filtered_df.empty:
+        return np.nan, np.nan, "", np.nan, np.nan, np.nan
+
+    # Calculate date range from the filtered data
+    date_range = f"{filtered_df['GAME_DATE'].min().date()} to {filtered_df['GAME_DATE'].max().date()}"
     if 'NaT' in date_range:
         return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
-    # Check if the player has played in the last 2 weeks
-    last_game_date = player_df['GAME_DATE'].max()
+    # Check if the player has played in the last 2 weeks (using filtered data)
+    last_game_date = filtered_df['GAME_DATE'].max()
     if (datetime.now() - last_game_date) > timedelta(days=14):
         return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
     # Identify the opponent team correctly
-    player_team = player_df.iloc[-1]['TEAM_ABBREVIATION']
+    player_team = filtered_df.iloc[-1]['TEAM_ABBREVIATION']
     teams = {prop_row['Current Team'], prop_row['Opponent Team']}
     if player_team in teams:
-        current_team = player_team
         opponent_team = (teams - {player_team}).pop()
     else:
         return np.nan, np.nan, "", np.nan, np.nan, np.nan
 
-    # Calculate weights based on recency and correct opponent team
-    player_df['recent_weight'] = np.exp(-np.arange(len(player_df))[::-1] / 3)
-    player_df['home_weight'] = np.where(player_df['MATCHUP'].str.contains('@'), 0.8, 1.2)
-    player_df['same_team_weight'] = np.where(player_df['MATCHUP'].str.contains(opponent_team), 1.5, 1.0)
-    player_df['combined_weight'] = player_df['recent_weight'] * player_df['home_weight'] * player_df['same_team_weight']
+    # Calculate weights for the filtered data using .loc to avoid SettingWithCopyWarning
+    filtered_df.loc[:, 'recent_weight'] = np.exp(-np.arange(len(filtered_df))[::-1] / 3)
+    filtered_df.loc[:, 'home_weight'] = np.where(filtered_df['MATCHUP'].str.contains('@'), 0.8, 1.2)
+    filtered_df.loc[:, 'same_team_weight'] = np.where(filtered_df['MATCHUP'].str.contains(opponent_team), 1.5, 1.0)
+    filtered_df.loc[:, 'combined_weight'] = (
+        filtered_df.loc[:, 'recent_weight'] *
+        filtered_df.loc[:, 'home_weight'] *
+        filtered_df.loc[:, 'same_team_weight']
+    )
 
-    # Calculate weighted mean and variance without log transform
-    weighted_mean = np.average(player_df[stat], weights=player_df['combined_weight'])
-    weighted_variance = np.average((player_df[stat] - weighted_mean) ** 2)
+    # Calculate weighted mean from the filtered data
+    weighted_mean = np.average(filtered_df[stat], weights=filtered_df['combined_weight'])
 
-    # Apply ARIMA model if sufficient data
-    if len(player_df) >= 10:
+    # Calculate weighted variance using the unfiltered data (variance_df) with MIN filter only
+    variance_df.loc[:, 'recent_weight'] = np.exp(-np.arange(len(variance_df))[::-1] / 3)
+    variance_df.loc[:, 'home_weight'] = np.where(variance_df['MATCHUP'].str.contains('@'), 0.8, 1.2)
+    variance_df.loc[:, 'same_team_weight'] = np.where(variance_df['MATCHUP'].str.contains(opponent_team), 1.5, 1.0)
+    variance_df.loc[:, 'combined_weight'] = (
+        variance_df.loc[:, 'recent_weight'] *
+        variance_df.loc[:, 'home_weight'] *
+        variance_df.loc[:, 'same_team_weight']
+    )
+    variance_value = np.average((variance_df[stat] - weighted_mean) ** 2, weights=variance_df['combined_weight'])
+
+    # Apply ARIMA model if sufficient data is available using the filtered data
+    if len(filtered_df) >= 10:
         best_model = None
         best_aic = float('inf')
+        # Create a temporary index for ARIMA model
+        filtered_df = filtered_df.copy()  # Additional copy to be safe
+        filtered_df.loc[:, 'game_index'] = np.arange(len(filtered_df))
         for p in range(1, 4):
             for d in range(1, 3):
                 for q in range(1, 4):
                     try:
-                        player_df['game_index'] = np.arange(len(player_df))
-                        model = ARIMA(player_df.set_index('game_index')[stat], order=(p, d, q), enforce_stationarity=False, enforce_invertibility=False)
+                        model = ARIMA(filtered_df.set_index('game_index')[stat], 
+                                      order=(p, d, q),
+                                      enforce_stationarity=False,
+                                      enforce_invertibility=False)
                         fit = model.fit()
                         residuals = fit.resid
-                        mse = np.mean(residuals**2)
+                        mse = np.mean(residuals ** 2)
                         if mse < best_aic:
                             best_aic = mse
                             best_model = fit
@@ -125,7 +152,7 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
         if best_model:
             arima_forecast = best_model.forecast(steps=1).iloc[0]
             # Discard ARIMA predictions more than 1 SD away from the weighted mean
-            if abs(arima_forecast - weighted_mean) > std:
+            if abs(arima_forecast - weighted_mean) > std_val:
                 arima_forecast = weighted_mean
                 print("more than SD away")
         else:
@@ -138,7 +165,10 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     # Calculate weighted combination of weighted mean and ARIMA forecast
     weighted_combination = 0.5 * weighted_mean + 0.5 * arima_forecast
 
-    return round(arima_forecast, 2), round(weighted_variance, 2), date_range, weighted_mean, arima_forecast, round(weighted_combination, 2)
+    return round(arima_forecast, 2), round(variance_value, 2), date_range, weighted_mean, arima_forecast, round(weighted_combination, 2)
+
+
+
 
 # Create a dictionary to store predictions for each player and stat
 predictions = []

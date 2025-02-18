@@ -32,8 +32,8 @@ for _, row in props.iterrows():
         'line': line,
         'best_bet': best_choice,
         'probability': best_prob,
-
-        'Weighted Average': row['Weighted Mean']
+        'Weighted Average': row['Weighted Mean'],
+        'Variance': row['Variance']
     })
 
 # Convert to DataFrame and sort by highest probability
@@ -41,4 +41,4 @@ parlays_df = pd.DataFrame(parlays)
 parlays_df = parlays_df.sort_values(by='probability', ascending=False)
 
 # Display top parlays
-print(parlays_df.head(10))
+print(parlays_df.head(20))
