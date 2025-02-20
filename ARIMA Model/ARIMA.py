@@ -163,7 +163,7 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
 # ----------------------------
 # SARIMAX modeling with exogenous variables for matchup context.
 # ----------------------------
-    if len(filtered_df) >= 5:
+    if len(filtered_df) >= 15:
         # Make a copy and assign a new index
         model_df = filtered_df.copy()
         model_df['game_index'] = np.arange(len(model_df))
@@ -206,8 +206,7 @@ def predict_stat_with_variance(player_name, stat, player_data, prop_row):
         arima_forecast = weighted_mean
         print("Not enough data for SARIMAX; using weighted mean")
 
-
-    weighted_combination = 0.5 * weighted_mean + 0.5 * arima_forecast
+    weighted_combination = 0.3 * weighted_mean + 0.7 * arima_forecast
     
     return (round(arima_forecast, 2), round(variance_value, 2), date_range,
             weighted_mean, arima_forecast, round(weighted_combination, 2))
