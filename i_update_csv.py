@@ -3,7 +3,7 @@ import pandas as pd
 import time
 import os
 
-# NBA API Endpoint for Player Game Logs
+# NBA API Endpoints
 NBA_GAME_LOGS_URL = "https://stats.nba.com/stats/playergamelogs"
 NBA_PLAYER_LIST_URL = "https://stats.nba.com/stats/commonallplayers"
 
@@ -20,72 +20,70 @@ HEADERS = {
 # The current season
 CURRENT_SEASON = "2024-25"
 
-# Ask user for season type
-while True:
-    season_type = input("Enter season type (Regular Season or Playoffs): ").strip()
-    if season_type in ["Regular Season", "Playoffs"]:
-        break
-    print("Invalid input. Please enter 'Regular Season' or 'Playoffs'.")
+# Get valid season type input
+def get_season_type():
+    while True:
+        season_type = input("Enter season type (Regular Season or Playoffs): ").strip()
+        if season_type in ["Regular Season", "Playoffs"]:
+            return season_type
+        print("Invalid input. Please enter 'Regular Season' or 'Playoffs'.")
+
+SEASON_TYPE = get_season_type()
 
 # Determine the correct filename
-if season_type == "Regular Season":
-    csv_file = "nba_players_game_logs_2018_25.csv"
-else:
-    csv_file = "nba_players_game_logs_2018_25_playoffs.csv"
+CSV_FILE = "nba_players_game_logs_2018_25.csv" if SEASON_TYPE == "Regular Season" else "nba_players_game_logs_2018_25_playoffs.csv"
 
-# Step 1: Get All Players Who Played in 2024-2025 (active players in the current season)
-params = {
-    "LeagueID": "00",
-    "Season": CURRENT_SEASON,
-    "IsOnlyCurrentSeason": "1"
-}
+# Function to fetch all active players for the current season
+def fetch_active_players():
+    params = {"LeagueID": "00", "Season": CURRENT_SEASON, "IsOnlyCurrentSeason": "1"}
+    response = requests.get(NBA_PLAYER_LIST_URL, headers=HEADERS, params=params)
 
-response = requests.get(NBA_PLAYER_LIST_URL, headers=HEADERS, params=params)
+    if response.status_code == 200:
+        players_data = response.json()
+        player_headers = players_data["resultSets"][0]["headers"]
+        player_rows = players_data["resultSets"][0]["rowSet"]
 
-if response.status_code == 200:
-    players_data = response.json()
-    player_headers = players_data["resultSets"][0]["headers"]
-    player_rows = players_data["resultSets"][0]["rowSet"]
+        players_df = pd.DataFrame(player_rows, columns=player_headers)
+        player_ids = players_df[["PERSON_ID", "DISPLAY_FIRST_LAST"]].drop_duplicates()
+        player_ids.columns = ["PLAYER_ID", "PLAYER_NAME"]
 
-    # Convert to DataFrame
-    players_df = pd.DataFrame(player_rows, columns=player_headers)
+        print(f"Successfully fetched {len(player_ids)} players!")
+        return player_ids
+    else:
+        print(f"Failed to fetch player list. HTTP Status Code: {response.status_code}")
+        exit()
 
-    # Extract Player IDs & Names (active players only)
-    player_ids = players_df[["PERSON_ID", "DISPLAY_FIRST_LAST"]].drop_duplicates()
-    player_ids.columns = ["PLAYER_ID", "PLAYER_NAME"]
-
-    print(f"Successfully fetched {len(player_ids)} players!")
-else:
-    print(f"Failed to fetch player list. HTTP Status Code: {response.status_code}")
-    exit()
-
-# Step 2: Fetch Game Logs for Each Player and Append New Games for the Current Season
-for player_id, player_name in player_ids.itertuples(index=False):
-    print(f"Fetching data for {player_name} (ID: {player_id})...")
-
-    # Read the existing CSV to see if there is any data for this player
-    if os.path.exists(csv_file):
-        existing_df = pd.read_csv(csv_file, low_memory=False)
+# Function to get the latest game date for a player and remove duplicate games
+def get_latest_game_date_and_remove_duplicates(player_id, new_data_df):
+    if os.path.exists(CSV_FILE):
+        existing_df = pd.read_csv(CSV_FILE, low_memory=False)
 
         if "GAME_ID" in existing_df.columns:
             player_existing_data = existing_df[existing_df["PLAYER_ID"] == player_id]
-            
-            # Find the latest GAME_DATE for the player
+
             if not player_existing_data.empty:
                 latest_game_date = player_existing_data["GAME_DATE"].max()
             else:
-                latest_game_date = "1900-01-01T00:00:00"  # A date far in the past in case no games exist for this player
+                latest_game_date = "1900-01-01T00:00:00"
+
+            # Remove games that are already in the CSV
+            new_data_df = new_data_df[~new_data_df["GAME_ID"].isin(existing_df["GAME_ID"])]
         else:
             latest_game_date = "1900-01-01T00:00:00"
     else:
         latest_game_date = "1900-01-01T00:00:00"
 
-    # Fetch game logs for the current season and season type
+    return new_data_df, latest_game_date
+
+# Function to fetch game logs for a player
+def fetch_game_logs(player_id, player_name):
+    print(f"Fetching data for {player_name} (ID: {player_id})...")
+
     params = {
         "PlayerID": player_id,
         "LeagueID": "00",
         "Season": CURRENT_SEASON,
-        "SeasonType": season_type  # User-selected season type
+        "SeasonType": SEASON_TYPE
     }
 
     response = requests.get(NBA_GAME_LOGS_URL, headers=HEADERS, params=params)
@@ -101,22 +99,36 @@ for player_id, player_name in player_ids.itertuples(index=False):
             df["PLAYER_NAME"] = player_name
             df["Season"] = CURRENT_SEASON
 
-            # Convert the GAME_DATE column to datetime, matching the format of the data
+            # Convert GAME_DATE to datetime
             df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"], format="%Y-%m-%dT%H:%M:%S")
 
-            # Filter the new games based on GAME_DATE being after the latest existing game date
-            new_games = df[df["GAME_DATE"] > pd.to_datetime(latest_game_date, format="%Y-%m-%dT%H:%M:%S")]
+            # Remove duplicate games and get the latest game date
+            new_games, latest_game_date = get_latest_game_date_and_remove_duplicates(player_id, df)
 
-            # Log how many new games are found for this player
-            print(f"New games found for {player_name} (ID: {player_id}): {len(new_games)}")
+            # Filter by latest game date
+            filtered_new_games = new_games[new_games["GAME_DATE"] > pd.to_datetime(latest_game_date, format="%Y-%m-%dT%H:%M:%S")]
 
-            if not new_games.empty:
-                # Append only new games to CSV without writing the header again
-                new_games.to_csv(csv_file, mode='a', header=False, index=False)
-                print(f"Appended {len(new_games)} new games for {player_name} (ID: {player_id})")
+            print(f"New games found for {player_name} (ID: {player_id}): {len(filtered_new_games)}")
 
-    # Prevent API blocking
-    time.sleep(1)
+            return filtered_new_games
+    else:
+        print(f"Failed to fetch data for {player_name} (ID: {player_id}). HTTP Status Code: {response.status_code}")
 
-# Inform user about completion
-print(f"Game logs have been successfully fetched and appended to {csv_file}!")
+    return pd.DataFrame()  # Return empty DataFrame if request fails
+
+# Main script execution
+if __name__ == "__main__":
+    player_list = fetch_active_players()
+
+    for player_id, player_name in player_list.itertuples(index=False):
+        new_game_data = fetch_game_logs(player_id, player_name)
+
+        if not new_game_data.empty:
+            # Append new games to CSV
+            new_game_data.to_csv(CSV_FILE, mode='a', header=not os.path.exists(CSV_FILE), index=False)
+            print(f"Appended {len(new_game_data)} new games for {player_name} (ID: {player_id})")
+
+        # Avoid getting blocked by API rate limits
+        time.sleep(1)
+
+    print(f"Game logs have been successfully fetched and appended to {CSV_FILE}!")

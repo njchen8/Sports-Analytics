@@ -32,7 +32,7 @@ for _, row in props.iterrows():
         'line': line,
         'best_bet': best_choice,
         'probability': best_prob,
-        'Weighted Average': row['Weighted Average'],
+        'Weighted Average': row['Weighted Mean'],
         'Weighted Combination': row['Weighted Combination'],
         'Variance': row['Variance']
     })

@@ -6,16 +6,58 @@ from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from datetime import datetime, timedelta
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
-# Load datasets with low_memory=False to avoid dtype warnings
 props_file_path = "fixed_data.csv"
-logs_file_path = "nba_players_game_logs_2018_25.csv"
+logs_file_path = "nba_players_game_logs_cleaned.csv"
 
 props_df = pd.read_csv(props_file_path, low_memory=False)
 logs_df = pd.read_csv(logs_file_path, low_memory=False)
 props_df = props_df[~props_df['Stat Type'].str.contains('1_')]
 
-# Convert GAME_DATE to datetime with specific format
-logs_df['GAME_DATE'] = pd.to_datetime(logs_df['GAME_DATE'], format='%Y-%m-%dT%H:%M:%S', errors='coerce')
+# Identify the correct date column dynamically
+possible_date_columns = ['GAME_DATE']  # Add more if needed
+date_column = next((col for col in possible_date_columns if col in logs_df.columns), None)
+
+if date_column is None:
+    print("Error: No valid date column found. Check column names again.")
+    print(logs_df.columns)
+    exit()
+
+# Convert the date column while handling multiple formats
+def parse_mixed_dates(date):
+    if isinstance(date, str):
+        if "T" in date:  # Check if it's in ISO format (YYYY-MM-DDTHH:MM:SS)
+            return pd.to_datetime(date, errors='coerce')
+        else:  # Standard YYYY-MM-DD format
+            return pd.to_datetime(date, format='%Y-%m-%d', errors='coerce')
+    return pd.NaT  # Return NaT (Not a Time) if it's not a valid string
+
+logs_df[date_column] = logs_df[date_column].apply(parse_mixed_dates)
+
+# Drop rows with invalid GAME_DATE
+logs_df = logs_df.dropna(subset=[date_column])
+
+# Sort the logs_df by GAME_DATE in descending order (most recent first)
+logs_df = logs_df.sort_values(by=date_column, ascending=False)
+
+# Debug: Print first and last few rows after sorting
+print("First few rows of logs_df after sorting:")
+print(logs_df.head())
+
+print("Last few rows of logs_df after sorting:")
+print(logs_df.tail())
+
+# Drop duplicates based on GAME_ID and PLAYER_ID
+logs_df = logs_df.drop_duplicates(subset=["GAME_ID", "PLAYER_ID"])
+
+# Check if players in props_df exist in logs_df
+players_in_props = props_df['Player'].unique()
+players_in_logs = logs_df['PLAYER_NAME'].unique()
+
+missing_players = set(players_in_props) - set(players_in_logs)
+if missing_players:
+    print(f"Players in props_df not found in logs_df: {missing_players}")
+else:
+    print("All players in props_df exist in logs_df.")
 
 # Ensure key stat columns are numeric
 stats_columns = ['PTS', 'REB', 'AST']
@@ -47,171 +89,105 @@ stat_mapping = {
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
-def extract_opponent(matchup):
-    """
-    Extract the opponent team abbreviation from the matchup string.
-    If the string contains ' vs. ', assume home game and return the part after it.
-    Otherwise, if it contains '@', return the part after '@'.
-    """
-    if " vs. " in matchup:
-        return matchup.split(" vs. ")[1].strip()
-    elif "@" in matchup:
-        return matchup.split("@")[1].strip()
-    else:
-        return None
+from datetime import datetime, timedelta
+import numpy as np
+import pandas as pd
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 def predict_stat_with_variance(player_name, stat, player_data, prop_row):
     """
-    Predicts a player's expected value and variance for a given stat using the last 25 valid matches.
-    This version builds exogenous variables for ARIMA (is_home and is_opponent) without relying on '@'
-    detection—instead, it uses the 'vs. ' indicator for home games and extracts the opponent with a helper.
-    
-    For the upcoming game, the prop file provides Home Team and Away Team.
+    Predicts a player's expected value and variance for a given stat.
+    - Uses a weighted mean from the last 25 most recent games.
+    - Uses ARIMA on the last 15 most recent games.
+    - If ARIMA forecast is more than 1 standard deviation away from weighted mean, discard it.
     """
+
     if stat not in player_data.columns:
-        return np.nan, np.nan, "", np.nan, np.nan, np.nan
+        print(f"Stat {stat} not found for {player_name}")
+        return np.nan, np.nan, "Stat Not Found", np.nan, np.nan, np.nan
 
-    # Filter and sort data for the player
-    player_df = player_data[player_data['PLAYER_NAME'] == player_name].copy()
-    player_df = player_df.sort_values(by="GAME_DATE")
+    # ✅ **Ensure GAME_DATE is correctly parsed**
+    player_data['GAME_DATE'] = pd.to_datetime(player_data['GAME_DATE'], errors='coerce')
+    player_data[stat] = pd.to_numeric(player_data[stat], errors='coerce')
 
-    # Ensure the last 25 matches are within a reasonable time period
-    if len(player_df) > 25:
-        time_span = (player_df['GAME_DATE'].iloc[-1] - player_df['GAME_DATE'].iloc[-25]).days
-        if time_span > 180:  # keep matches within the last 6 months
-            player_df = player_df[player_df['GAME_DATE'] >= player_df['GAME_DATE'].iloc[-25]]
-    player_df = player_df.tail(25)
+    # ✅ **Drop rows where GAME_DATE is NaT**
+    player_data = player_data.dropna(subset=['GAME_DATE'])
 
-    # Drop NaNs for the stat and require at least 5 minutes of play
-    player_df = player_df.dropna(subset=[stat])
-    player_df = player_df[player_df['MIN'] >= 5]
+    # ✅ **Sort entire dataset by GAME_DATE (most recent first)**
+    player_data = player_data.sort_values(by="GAME_DATE", ascending=False)
+
+    # ✅ **Find the latest year in the dataset**
+    latest_year = player_data['GAME_DATE'].dt.year.max()
+    print(f"Latest year in dataset: {latest_year}")
+
+    # ✅ **Filter player-specific data**
+    player_df = player_data[player_data['PLAYER_NAME'] == player_name]
+
+    total_games = len(player_df)
+    print(f"Player: {player_name}, Total Games Available: {total_games}")
 
     if player_df.empty:
-        return np.nan, np.nan, "", np.nan, np.nan, np.nan
+        print(f"No data available for {player_name}")
+        return np.nan, np.nan, "No Data", np.nan, np.nan, np.nan
 
-    # Copy for variance calculation (only MIN filter applied)
-    variance_df = player_df.copy()
+    # ✅ **Select only the most recent games in the latest year**
+    recent_games = player_df[player_df['GAME_DATE'].dt.year == latest_year]
 
-    # Apply 3 SD filter for ARIMA and weighted mean calculations
-    mean_val = player_df[stat].mean()
-    std_val = player_df[stat].std()
-    filtered_df = player_df[(player_df[stat] >= mean_val - 3 * std_val) &
-                             (player_df[stat] <= mean_val + 3 * std_val)].copy()
+    # ✅ **If player has no games in the latest year, use the most recent 25 available**
+    if recent_games.empty:
+        print(f"No games found for {player_name} in {latest_year}. Using most recent available games.")
+        recent_games = player_df.iloc[:25]  # Take last 25 available games
 
-    if filtered_df.empty:
-        return np.nan, np.nan, "", np.nan, np.nan, np.nan
-
-    # Date range for the filtered data
-    date_range = f"{filtered_df['GAME_DATE'].min().date()} to {filtered_df['GAME_DATE'].max().date()}"
-    if 'NaT' in date_range:
-        return np.nan, np.nan, "", np.nan, np.nan, np.nan
-
-    # Check if the player has played recently (last 2 weeks)
-    last_game_date = filtered_df['GAME_DATE'].max()
-    if (datetime.now() - last_game_date) > timedelta(days=14):
-        return np.nan, np.nan, "", np.nan, np.nan, np.nan
-
-    # Determine upcoming matchup context using prop data
-    player_team = filtered_df.iloc[-1]['TEAM_ABBREVIATION']
-    teams = {prop_row['Current Team'], prop_row['Opponent Team']}
-    if player_team in teams:
-        opponent_team = (teams - {player_team}).pop()
     else:
-        return np.nan, np.nan, "", np.nan, np.nan, np.nan
+        recent_games = recent_games.iloc[:25]  # Take last 25 games in latest year
 
-    # Upcoming game home/away from prop data: if Current Team equals Home Team then game is at home.
-    upcoming_home = 1 if prop_row["Current Team"] == prop_row["Home Team"] else 0
+    # ✅ **Ensure at least 5 games exist for meaningful prediction**
+    if len(recent_games) < 5:
+        mean_val = recent_games[stat].mean()
+        return round(mean_val, 2), 0, f"{recent_games['GAME_DATE'].min().date()} to {recent_games['GAME_DATE'].max().date()}", round(mean_val, 2), round(mean_val, 2), round(mean_val, 2)
 
-    # Compute weights for weighted mean and variance using the matchup string,
-    # but determine home/away via the presence of " vs. " (home) rather than "@".
-    filtered_df.loc[:, 'recent_weight'] = np.exp(-np.arange(len(filtered_df))[::-1] / 3)
-    
-    # For historical games, if the MATCHUP string contains " vs. ", assume it was a home game.
-    filtered_df.loc[:, 'location_weight'] = np.where(filtered_df['MATCHUP'].str.contains(" vs. "), 
-                                                       1.2 if upcoming_home == 1 else 0.8,
-                                                       0.8 if upcoming_home == 1 else 1.2)
-    
-    # Extract opponent from MATCHUP and assign weight if it matches the upcoming opponent.
-    filtered_df.loc[:, 'extracted_opponent'] = filtered_df['MATCHUP'].apply(extract_opponent)
-    filtered_df.loc[:, 'opponent_weight'] = np.where(filtered_df['extracted_opponent'] == opponent_team, 1.5, 1.0)
-    
-    # Combined weight for historical games
-    filtered_df.loc[:, 'combined_weight'] = (
-        filtered_df['recent_weight'] *
-        filtered_df['location_weight'] *
-        filtered_df['opponent_weight']
+    # ✅ **Calculate weighted mean**
+    recent_games['recent_weight'] = np.exp(-np.arange(len(recent_games))[::-1] / 3)
+    weighted_mean = np.average(recent_games[stat], weights=recent_games['recent_weight'])
+    std_dev = recent_games[stat].std()
+
+    # ✅ **Take the 15 most recent games for ARIMA**
+    arima_df = recent_games.iloc[:15]
+
+    if arima_df.empty or len(arima_df) < 5:
+        print(f"Not enough data for ARIMA for {player_name}. Using weighted mean.")
+        return round(weighted_mean, 2), 0, f"{recent_games['GAME_DATE'].min().date()} to {recent_games['GAME_DATE'].max().date()}", round(weighted_mean, 2), round(weighted_mean, 2), round(weighted_mean, 2)
+
+    # ✅ **Run ARIMA Forecasting**
+    try:
+        model = SARIMAX(arima_df[stat], order=(1, 0, 1), enforce_stationarity=False, enforce_invertibility=False)
+        best_model = model.fit(disp=False)
+        arima_forecast = best_model.forecast(steps=1).iloc[0]
+
+        # ✅ **Discard ARIMA forecast if it's more than 1 SD away from the weighted mean**
+        if abs(arima_forecast - weighted_mean) > std_dev:
+            print(f"ARIMA forecast deviated too much for {player_name}, stat {stat}. Discarding ARIMA forecast.")
+            arima_forecast = weighted_mean  # Default to weighted mean
+
+        print(f"SARIMAX forecast succeeded for {player_name}, stat {stat}: {arima_forecast}")
+
+    except Exception as e:
+        print(f"SARIMAX failed for {player_name}, stat {stat}. Error: {e}")
+        arima_forecast = weighted_mean  # Default to weighted mean on failure
+
+    # ✅ **Final weighted combination**
+    weighted_combination = 0.5 * weighted_mean + 0.5 * arima_forecast
+
+    return (
+        round(arima_forecast, 2), 
+        round(std_dev ** 2, 2), 
+        f"{recent_games['GAME_DATE'].min().date()} to {recent_games['GAME_DATE'].max().date()}",
+        round(weighted_mean, 2), 
+        round(arima_forecast, 2), 
+        round(weighted_combination, 2)
     )
-    weighted_mean = np.average(filtered_df[stat], weights=filtered_df['combined_weight'])
-    
-    # Compute variance using variance_df with similar weights
-    variance_df.loc[:, 'recent_weight'] = np.exp(-np.arange(len(variance_df))[::-1] / 3)
-    variance_df.loc[:, 'location_weight'] = np.where(variance_df['MATCHUP'].str.contains(" vs. "), 
-                                                       1.2 if upcoming_home == 1 else 0.8,
-                                                       0.8 if upcoming_home == 1 else 1.2)
-    variance_df.loc[:, 'extracted_opponent'] = variance_df['MATCHUP'].apply(extract_opponent)
-    variance_df.loc[:, 'opponent_weight'] = np.where(variance_df['extracted_opponent'] == opponent_team, 1.5, 1.0)
-    variance_df.loc[:, 'combined_weight'] = (
-        variance_df['recent_weight'] *
-        variance_df['location_weight'] *
-        variance_df['opponent_weight']
-    )
-    variance_value = np.average((variance_df[stat] - weighted_mean) ** 2, weights=variance_df['combined_weight'])
-    
-    # ARIMA modeling with exogenous variables for matchup context.
-    from statsmodels.tsa.statespace.sarimax import SARIMAX
 
-# ----------------------------
-# SARIMAX modeling with exogenous variables for matchup context.
-# ----------------------------
-    if len(filtered_df) >= 15:
-        # Make a copy and assign a new index
-        model_df = filtered_df.copy()
-        model_df['game_index'] = np.arange(len(model_df))
-        model_df = model_df.set_index('game_index')  # Now both endog and exog share the same index
 
-        # Determine home/away using both indicators:
-        # Home game if MATCHUP contains " vs. ", away if it contains "@".
-        model_df['is_home'] = model_df['MATCHUP'].apply(
-            lambda x: 1 if " vs. " in x else (0 if "@" in x else 0)
-        )
-        # Extract opponent using helper function
-        model_df['extracted_opponent'] = model_df['MATCHUP'].apply(extract_opponent)
-        # is_opponent: 1 if the extracted opponent equals the upcoming opponent, else 0.
-        model_df['is_opponent'] = (model_df['extracted_opponent'] == opponent_team).astype(int)
-        
-        # Prepare exogenous data (they now share the same index as the stat series)
-        exog_data = model_df[['is_home', 'is_opponent']]
-        # Upcoming game exogenous variables: use prop data for home status and assume opponent=1.
-        upcoming_exog = np.array([[upcoming_home, 1]])
-        
-        try:
-            model = SARIMAX(
-                model_df[stat],
-                order=(1, 0, 1),
-                exog=exog_data,
-                enforce_stationarity=False,
-                enforce_invertibility=False
-            )
-            best_model = model.fit(disp=False)
-            arima_forecast = best_model.forecast(steps=1, exog=upcoming_exog).iloc[0]
-            if abs(arima_forecast - weighted_mean) > std_val:
-                arima_forecast = weighted_mean
-                print("Forecast deviated too much; defaulting to weighted mean")
-            else:
-                print("SARIMAX forecast succeeded")
-        except Exception as e:
-            print("SARIMAX model failed; using weighted mean. Error:", e)
-            arima_forecast = weighted_mean
-    else:
-        arima_forecast = weighted_mean
-        print("Not enough data for SARIMAX; using weighted mean")
-
-    weighted_combination = 0.3 * weighted_mean + 0.7 * arima_forecast
-    
-    return (round(arima_forecast, 2), round(variance_value, 2), date_range,
-            weighted_mean, arima_forecast, round(weighted_combination, 2))
-
-# Create a list to store predictions
 predictions = []
 
 for _, row in props_df.iterrows():
@@ -220,10 +196,13 @@ for _, row in props_df.iterrows():
     
     stat_col = stat_mapping.get(stat_type)
     if stat_col is None:
+        print(f"Skipping {player_name}: Stat type '{stat_type}' not found in mapping.")
         continue
     
     if not logs_df[logs_df['PLAYER_NAME'] == player_name].empty:
         predicted_value, variance_value, date_range, mean_val, arima_val, weighted_combination = predict_stat_with_variance(player_name, stat_col, logs_df, row)
+        
+        print(f"Player: {player_name}, Stat: {stat_col}, Predicted Value: {predicted_value}, ARIMA Forecast: {arima_val}, Date Range: {date_range}")
         
         if date_range:
             # Determine the upcoming opponent based on prop data and player's team
@@ -244,11 +223,13 @@ for _, row in props_df.iterrows():
             })
 
 # Convert predictions to DataFrame and save to CSV
-predictions_df = pd.DataFrame(predictions)
-predictions_df = predictions_df.sort_values(by=["ARIMA Forecast", "Weighted Mean"], ascending=[False, False])
-
-if not predictions_df.empty:
-    predictions_df.to_csv("player_expected_values.csv", index=False)
-    print("Expected values and variances saved to player_expected_values.csv")
+if predictions:
+    predictions_df = pd.DataFrame(predictions)
+    if not predictions_df.empty:
+        predictions_df = predictions_df.sort_values(by=["ARIMA Forecast", "Weighted Mean"], ascending=[False, False])
+        predictions_df.to_csv("player_expected_values.csv", index=False)
+        print("Expected values and variances saved to player_expected_values.csv")
+    else:
+        print("No valid predictions were generated")
 else:
-    print("No valid predictions were generated")
+    print("No predictions were generated")
