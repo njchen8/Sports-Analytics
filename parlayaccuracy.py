@@ -4,12 +4,10 @@ import numpy as np
 import time
 from nba_api.stats.static import players
 from nba_api.stats.endpoints import playergamelog
-from scipy.stats import norm
 
-def get_latest_stat(player_name, stat_type, season='2024-25'):
+def get_latest_stat(player_name, stat_type, season='2023-24'):
     """
     Given a player's full name and a stat type, this function returns the most recent game's stat.
-    For 'pts_rebs_asts', it sums points, rebounds, and assists.
     """
     player_list = players.find_players_by_full_name(player_name)
     if not player_list:
@@ -39,27 +37,55 @@ def get_latest_stat(player_name, stat_type, season='2024-25'):
         return latest_game['REB']
     elif stat_type == 'assists':
         return latest_game['AST']
-    elif stat_type == 'pts_rebs_asts':
-        return latest_game['PTS'] + latest_game['REB'] + latest_game['AST']
     else:
         return None
 
 def compute_hit(row):
     """
     Determines if the prop line prediction was a hit.
-    For 'over' bets, hit if actual stat >= prop line.
-    For 'under' bets, hit if actual stat <= prop line.
     """
     if pd.isna(row['Actual Value']):
         return np.nan
-    if row['Best Bet'] == 'over':
+    if row['Predicted Value'] >= row['Prop Line']:
         return 1 if row['Actual Value'] >= row['Prop Line'] else 0
     else:
         return 1 if row['Actual Value'] <= row['Prop Line'] else 0
 
+def calculate_parlay_accuracy(predictions_df, parlay_legs):
+    """Calculates the accuracy of a single parlay."""
+    leg_results = []
+
+    for leg in parlay_legs:
+        player, stat_type, prop_line_str = leg.split('|')
+        prop_line = float(prop_line_str)
+
+        leg_data = predictions_df[
+            (predictions_df['Player'] == player) &
+            (predictions_df['Stat Type'] == stat_type) &
+            (predictions_df['Prop Line'] == prop_line)
+        ]
+
+        if not leg_data.empty:
+            actual_value = leg_data['Actual Value'].iloc[0]
+            predicted_value = leg_data['Predicted Value'].iloc[0]
+            if not pd.isna(actual_value):
+                if predicted_value >= prop_line:
+                    leg_results.append(actual_value >= prop_line)
+                else:
+                    leg_results.append(actual_value <= prop_line)
+            else:
+                return None  # Missing actual value, parlay is invalid
+        else:
+            return None  # Leg not found in predictions, parlay is invalid
+
+    if all(leg_results):
+        return 1  # Parlay hit
+    else:
+        return 0  # Parlay missed
+
 def main():
     # Read predictions from CSV
-    predictions_csv = "predictions_sorted.csv"
+    predictions_csv = "nba_predictions_with_probabilities_sorted.csv"
     predictions_df = pd.read_csv(predictions_csv)
     
     # Fetch actual performance from the NBA API for each prediction row.
@@ -69,11 +95,6 @@ def main():
     
     # Compute whether each prediction was a hit
     predictions_df['Hit'] = predictions_df.apply(compute_hit, axis=1)
-    
-    # Print the prop line and actual value for each game
-    print("\nIndividual Game Results:")
-    for idx, row in predictions_df.iterrows():
-        print(f"Player: {row['Player']} - Prop Line: {row['Prop Line']}, Actual Value: {row['Actual Value']}")
     
     # Categorize by R²: "Positive R²" if >= 0, otherwise "Negative R²"
     predictions_df['R^2 Group'] = np.where(predictions_df['R^2 Value'] >= 0, 'Positive R²', 'Negative R²')
@@ -85,30 +106,35 @@ def main():
     positive_hit_pct = positive_df['Hit'].mean() * 100 if not positive_df.empty else None
     negative_hit_pct = negative_df['Hit'].mean() * 100 if not negative_df.empty else None
     
-    print(f"\nOverall hit percentage for props with Positive R²: {positive_hit_pct:.2f}%")
-    print(f"Overall hit percentage for props with Negative R²: {negative_hit_pct:.2f}%")
+    print(f"\nOverall hit percentage for props with Positive R²: {positive_hit_pct:.2f}% (Count: {len(positive_df)})")
     
     # Group predictions by probability buckets.
     bins = [0, 0.5, 0.6, 0.7, 0.8, 1.0]
-    predictions_df['Prob_Bin'] = pd.cut(predictions_df['Probability Max'], bins)
+    predictions_df['Prob_Bin'] = pd.cut(predictions_df['Probability'], bins)
     
     hit_rates_by_prob = predictions_df.groupby('Prob_Bin')['Hit'].mean() * 100
-    print("\nHit percentages by Probability Max bins (overall):")
-    print(hit_rates_by_prob)
+    counts_by_prob = predictions_df.groupby('Prob_Bin').size()
+    print("\nHit percentages by Probability bins (overall):")
+    for bin_label, hit_rate in hit_rates_by_prob.items():
+        count = counts_by_prob[bin_label]
+        print(f"{bin_label}: {hit_rate:.2f}% (Count: {count})")
     
     hit_rates_by_group = predictions_df.groupby(['R^2 Group', 'Prob_Bin'])['Hit'].mean() * 100
-    print("\nHit percentages by R² Group and Probability Max bins:")
-    print(hit_rates_by_group)
+    counts_by_group = predictions_df.groupby(['R^2 Group', 'Prob_Bin']).size()
+    print("\nHit percentages by R² Group and Probability bins:")
+    for (r2_group, bin_label), hit_rate in hit_rates_by_group.items():
+        count = counts_by_group[(r2_group, bin_label)]
+        print(f"{r2_group}, {bin_label}: {hit_rate:.2f}% (Count: {count})")
     
     # Identify best conditions: for example, high probability (>= 0.8) and positive R².
     best_conditions = predictions_df[
-        (predictions_df['Probability Max'] >= 0.8) & (predictions_df['R^2 Group'] == 'Positive R²')
+        (predictions_df['Probability'] >= 0.8) & (predictions_df['R^2 Group'] == 'Positive R²')
     ]
     if not best_conditions.empty:
         best_hit_pct = best_conditions['Hit'].mean() * 100
-        print(f"\nFor predictions with Probability Max >= 0.8 and Positive R², the hit rate is: {best_hit_pct:.2f}%")
+        print(f"\nFor predictions with Probability >= 0.8 and Positive R², the hit rate is: {best_hit_pct:.2f}% (Count: {len(best_conditions)})")
     else:
-        print("\nNo predictions met the conditions (Probability Max >= 0.8 and Positive R²).")
+        print("\nNo predictions met the conditions (Probability >= 0.8 and Positive R²).")
     
 if __name__ == '__main__':
     main()

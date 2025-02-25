@@ -18,7 +18,7 @@ prop_df = pd.read_csv(prop_data_path)
 def predict_player_stat(player_name, opponent_team, home_game, stat_type, prop_line):
     """Predicts a player's stat and calculates EV."""
 
-    print(f"Processing: {player_name}, {stat_type} vs {opponent_team} ({'home' if home_game == 'home' else 'away'})")
+    print(f"\nProcessing: {player_name}, {stat_type} vs {opponent_team} ({'home' if home_game == 'home' else 'away'})")
 
     player_df = df[df['PLAYER_NAME'] == player_name]
     if player_df.empty:
@@ -60,24 +60,26 @@ def predict_player_stat(player_name, opponent_team, home_game, stat_type, prop_l
 
     player_df = player_df.dropna(subset=features + [target_variable])
 
+    # Split data
+    test_df = player_df.iloc[:15].copy()
     train_df = player_df.iloc[15:].copy()
-
     X_train, y_train = train_df[features].values, train_df[target_variable].values
+    X_test, y_test = test_df[features].values, test_df[target_variable].values
 
+    # Hyperparameter tuning
     param_dist = {
         "n_estimators": randint(50, 200),
         "max_depth": [3, 5, 7, 10, None],
         "min_samples_split": randint(2, 10),
         "min_samples_leaf": randint(1, 5)
     }
-
     model = RandomForestRegressor(random_state=10)
     kf = KFold(n_splits=5, shuffle=True, random_state=10)
     random_search = RandomizedSearchCV(model, param_distributions=param_dist, n_iter=50, cv=kf, scoring='r2', n_jobs=-1, random_state=10)
     random_search.fit(X_train, y_train)
-
     best_model = random_search.best_estimator_
 
+    # Prediction
     input_data = pd.DataFrame({
         'HOME_GAME': [1 if home_game == 'home' else 0],
         'BACK_TO_BACK': [0],
@@ -88,22 +90,29 @@ def predict_player_stat(player_name, opponent_team, home_game, stat_type, prop_l
         'TEAM_MATCHUP': [opponent_team],
         'AVG_VS_TEAM_5': [player_df[player_df['TEAM_MATCHUP'] == opponent_team][target_variable].rolling(window=5).mean().iloc[-1] if not player_df[player_df['TEAM_MATCHUP'] == opponent_team].empty else player_df[target_variable].mean()]
     })
-
     input_data = input_data.merge(team_stats_df, left_on='TEAM_MATCHUP', right_on='TEAM_ABBREVIATION', how='left')
     input_features = input_data[features].values
+    prediction = best_model.predict(input_features)
 
-    prediction = best_model.predict(input_features)[0]
+    # Calculate R^2 for the 15 game backtest
+    r2_backtest = r2_score(y_test, best_model.predict(X_test))
+    print(f"  -> R^2 of 15 game backtest: {r2_backtest:.3f}")
 
+    # Calculate variance of the most recent 10 games
+    variance_10 = player_df[target_variable].tail(10).var()
+    print(f"  -> Variance of last 10 games: {variance_10:.3f}")
+
+    # Check if prediction is too far from prop line
     std_dev = player_df[target_variable].std()
     if abs(prediction - prop_line) > std_dev:
         print(f"  -> Prediction too far from prop line: {player_name}, {stat_type}")
-        return None # prediction too far from prop line.
+        return None
 
-    print(f"  -> Predicted {stat_type}: {prediction:.2f}")
-    return prediction
+    print(f"  -> Predicted {stat_type}: {prediction[0]:.2f}")
+    return prediction[0], r2_backtest, variance_10
 
 results = []
-processed_combinations = set() #keep track of processed combinations.
+processed_combinations = set()
 
 for index, row in prop_df.iterrows():
     player = row['Player']
@@ -115,8 +124,9 @@ for index, row in prop_df.iterrows():
     for stat in stat_types:
         combination = (player, stat)
         if combination not in processed_combinations:
-            predicted_value = predict_player_stat(player, opponent, home_away, stat, prop_line)
-            if predicted_value is not None:
+            result = predict_player_stat(player, opponent, home_away, stat, prop_line)
+            if result is not None:
+                predicted_value, r2_backtest, variance_10 = result
                 results.append({
                     'Player': player,
                     'Opponent Team': opponent,
@@ -124,8 +134,14 @@ for index, row in prop_df.iterrows():
                     'Stat Type': stat,
                     'Prop Line': prop_line,
                     'Predicted Value': predicted_value,
+                    'R^2 Value': r2_backtest,
+                    'Variance (Last 10)': variance_10
                 })
             processed_combinations.add(combination)
 
 results_df = pd.DataFrame(results)
-print(results_df)
+
+# Save the results to a CSV file
+results_df.to_csv("nba_predictions.csv", index=False)
+
+print("Predictions saved to nba_predictions.csv")
