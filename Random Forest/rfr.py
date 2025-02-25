@@ -35,6 +35,16 @@ def predict_player_stat(player_name, opponent_team, home_game, stat_type, prop_l
         print(f"  -> Not played in the last week: {player_name}")
         return None  # Not played in the last week
 
+    # Check last 3 games
+    last_3_games = player_df.head(3)
+    if len(last_3_games) < 3:
+        print(f"  -> Less than 3 games played: {player_name}")
+        return None
+    
+    if len(set(last_3_games['TEAM_ID'])) != 1:
+        print(f"  -> Player didn't play for the same team in last 3 games: {player_name}")
+        return None
+
     stat_column_map = {'points': 'PTS', 'rebounds': 'REB', 'assists': 'AST'}
     target_variable = stat_column_map.get(stat_type)
 
