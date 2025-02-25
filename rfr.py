@@ -52,12 +52,11 @@ def predict_player_stat(player_name, opponent_team, home_game, stat_type, prop_l
     player_df['PROP_VARIANCE_10'] = player_df[target_variable].rolling(window=10, min_periods=1).var().fillna(player_df[target_variable].var())
     player_df['TEAM_MATCHUP'] = player_df['MATCHUP'].apply(lambda x: x.split()[-1])
     player_df['AVG_VS_TEAM_5'] = player_df.groupby('TEAM_MATCHUP')[target_variable].rolling(window=5, min_periods=1).mean().reset_index(level=0, drop=True).fillna(player_df[target_variable].mean())
-    player_df['AVG_LAST_5'] = player_df[target_variable].rolling(window=5, min_periods=1).mean().fillna(player_df[target_variable].mean())
 
     player_df = player_df.merge(team_stats_df, left_on='TEAM_MATCHUP', right_on='TEAM_ABBREVIATION', how='left')
 
     features = ['HOME_GAME', 'BACK_TO_BACK', 'PTS_PREV_1', 'PTS_PREV_2', 'PTS_PREV_3',
-                'OFF_RATING', 'DEF_RATING', 'NET_RATING', 'PACE', 'AST_RATIO', 'REB_PCT', 'PROP_VARIANCE_10', 'AVG_VS_TEAM_5', 'AVG_LAST_5']
+                'OFF_RATING', 'DEF_RATING', 'NET_RATING', 'PACE', 'AST_RATIO', 'REB_PCT', 'PROP_VARIANCE_10', 'AVG_VS_TEAM_5']
 
     player_df = player_df.dropna(subset=features + [target_variable])
 
@@ -89,8 +88,7 @@ def predict_player_stat(player_name, opponent_team, home_game, stat_type, prop_l
         'PTS_PREV_3': [player_df[target_variable].iloc[2]],
         'PROP_VARIANCE_10': [player_df['PROP_VARIANCE_10'].iloc[0]],
         'TEAM_MATCHUP': [opponent_team],
-        'AVG_VS_TEAM_5': [player_df[player_df['TEAM_MATCHUP'] == opponent_team][target_variable].rolling(window=5).mean().iloc[-1] if not player_df[player_df['TEAM_MATCHUP'] == opponent_team].empty else player_df[target_variable].mean()],
-        'AVG_LAST_5': [player_df[target_variable].rolling(window=5).mean().iloc[-1]]
+        'AVG_VS_TEAM_5': [player_df[player_df['TEAM_MATCHUP'] == opponent_team][target_variable].rolling(window=5).mean().iloc[-1] if not player_df[player_df['TEAM_MATCHUP'] == opponent_team].empty else player_df[target_variable].mean()]
     })
     input_data = input_data.merge(team_stats_df, left_on='TEAM_MATCHUP', right_on='TEAM_ABBREVIATION', how='left')
     input_features = input_data[features].values

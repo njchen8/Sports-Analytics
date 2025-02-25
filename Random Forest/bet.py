@@ -1,13 +1,13 @@
 import pandas as pd
 import numpy as np
-from scipy.stats import nbinom, norm
+from scipy.stats import poisson, norm
 
 # Load the predictions CSV
 predictions_csv = "nba_predictions.csv"  # Replace with your predictions CSV file path
 predictions_df = pd.read_csv(predictions_csv)
 
 def calculate_probability(row):
-    """Calculates the probability and determines over/under using negative binomial."""
+    """Calculates the probability and determines over/under."""
 
     predicted_value = row['Predicted Value']
     prop_line = row['Prop Line']
@@ -17,12 +17,14 @@ def calculate_probability(row):
     if pd.isna(predicted_value) or pd.isna(prop_line) or pd.isna(variance):
         return None, None  # Handle missing values
 
-    if variance <= 0 or predicted_value <= 0:
-        return None, None  # cannot calculate distribution with no variance or predicted value.
+    if variance <= 0:
+        return None, None  # cannot calculate distribution with no variance.
 
     # Determine if we should use normal distribution
     use_normal_distribution = False
-    if stat_type == 'points':
+    if stat_type in ['rebounds', 'assists'] and predicted_value >= 10:  # Example threshold: predicted value >= 10
+        use_normal_distribution = True
+    elif stat_type == 'points':
         use_normal_distribution = True
 
     if use_normal_distribution:
@@ -32,14 +34,9 @@ def calculate_probability(row):
         prob_over = 1 - norm.cdf(prop_line, loc=predicted_value, scale=std_dev)
         prob_under = 1 - prob_over
     elif stat_type in ['rebounds', 'assists']:
-        # Negative binomial parameters
-        r = predicted_value**2 / (variance - predicted_value)
-        p = predicted_value / variance
-
-        if r <= 0 or p <= 0 or p >= 1:
-            return None, None # invalid negative binomial parameters.
-
-        prob_over = 1 - nbinom.cdf(int(prop_line - 1), r, p)
+        if predicted_value <= 0:
+            return None, None  # cannot calculate poisson with negative or zero predicted value.
+        prob_over = 1 - poisson.cdf(int(prop_line - 1), mu=predicted_value)
         prob_under = 1 - prob_over
     else:
         return None, None  # Handle unknown stat types

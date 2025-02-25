@@ -15,8 +15,8 @@ df = pd.read_csv(file_path)
 team_stats_df = pd.read_csv(team_stats_path)
 prop_df = pd.read_csv(prop_data_path)
 
-def predict_player_stat(player_name, opponent_team, home_game, stat_type, prop_line):
-    """Predicts a player's stat and calculates EV."""
+def predict_player_stat_distribution(player_name, opponent_team, home_game, stat_type, prop_line, num_samples=1000):
+    """Predicts a player's stat and returns a distribution of probabilities."""
 
     print(f"\nProcessing: {player_name}, {stat_type} vs {opponent_team} ({'home' if home_game == 'home' else 'away'})")
 
@@ -57,7 +57,7 @@ def predict_player_stat(player_name, opponent_team, home_game, stat_type, prop_l
     player_df = player_df.merge(team_stats_df, left_on='TEAM_MATCHUP', right_on='TEAM_ABBREVIATION', how='left')
 
     features = ['HOME_GAME', 'BACK_TO_BACK', 'PTS_PREV_1', 'PTS_PREV_2', 'PTS_PREV_3',
-                'OFF_RATING', 'DEF_RATING', 'NET_RATING', 'PACE', 'AST_RATIO', 'REB_PCT', 'PROP_VARIANCE_10', 'AVG_VS_TEAM_5', 'AVG_LAST_5']
+                'OFF_RATING', 'DEF_RATING', 'NET_RATING', 'PACE', 'AST_RATIO', 'REB_PCT', 'PROP_VARIANCE_10', 'AVG_VS_TEAM_5','AVG_LAST_5']
 
     player_df = player_df.dropna(subset=features + [target_variable])
 
@@ -94,7 +94,33 @@ def predict_player_stat(player_name, opponent_team, home_game, stat_type, prop_l
     })
     input_data = input_data.merge(team_stats_df, left_on='TEAM_MATCHUP', right_on='TEAM_ABBREVIATION', how='left')
     input_features = input_data[features].values
-    prediction = best_model.predict(input_features)
+
+    # Generate distribution using multiple predictions from the forest
+    predictions = []
+    for tree in best_model.estimators_:
+        predictions.append(tree.predict(input_features)[0])
+    predictions = np.array(predictions)
+
+    # Increase variance
+    variance_factor = 1.5 # Increase variance by 50%
+    predictions_adjusted = np.random.normal(np.mean(predictions), np.std(predictions) * variance_factor, len(predictions))
+
+    # Calculate probabilities
+    probs = {}
+    for i in range(int(min(predictions_adjusted)), int(max(predictions_adjusted)) + 2):
+        probs[i] = np.mean(predictions_adjusted >= i) - np.mean(predictions_adjusted >= i + 1)
+
+    # Clean distribution to remove jumps
+    cleaned_probs = {}
+    last_non_zero = -1
+    for k in sorted(probs.keys()):
+        if probs[k] > 0:
+            cleaned_probs[k] = probs[k]
+            last_non_zero = k
+        elif last_non_zero != -1:
+            cleaned_probs[k] = 0.0
+        else:
+            cleaned_probs[k] = 0.0
 
     # Calculate R^2 for the 15 game backtest
     r2_backtest = r2_score(y_test, best_model.predict(X_test))
@@ -104,14 +130,18 @@ def predict_player_stat(player_name, opponent_team, home_game, stat_type, prop_l
     variance_10 = player_df[target_variable].tail(10).var()
     print(f"  -> Variance of last 10 games: {variance_10:.3f}")
 
-    # Check if prediction is too far from prop line
+    # Check if mean prediction is too far from prop line
     std_dev = player_df[target_variable].std()
-    if abs(prediction - prop_line) > std_dev:
+    mean_prediction = np.mean(predictions)
+    if abs(mean_prediction - prop_line) > std_dev:
         print(f"  -> Prediction too far from prop line: {player_name}, {stat_type}")
         return None
 
-    print(f"  -> Predicted {stat_type}: {prediction[0]:.2f}")
-    return prediction[0], r2_backtest, variance_10
+    print(f"  -> Predicted {stat_type} Distribution:")
+    for stat_val, prob in cleaned_probs.items():
+        print(f"    {stat_val}: {prob:.4f}")
+
+    return cleaned_probs, r2_backtest, variance_10
 
 results = []
 processed_combinations = set()
@@ -126,16 +156,16 @@ for index, row in prop_df.iterrows():
     for stat in stat_types:
         combination = (player, stat)
         if combination not in processed_combinations:
-            result = predict_player_stat(player, opponent, home_away, stat, prop_line)
+            result = predict_player_stat_distribution(player, opponent, home_away, stat, prop_line)
             if result is not None:
-                predicted_value, r2_backtest, variance_10 = result
+                predicted_distribution, r2_backtest, variance_10 = result
                 results.append({
                     'Player': player,
                     'Opponent Team': opponent,
                     'Home Team': row['Home Team'],
                     'Stat Type': stat,
                     'Prop Line': prop_line,
-                    'Predicted Value': predicted_value,
+                    'Predicted Distribution': predicted_distribution,
                     'R^2 Value': r2_backtest,
                     'Variance (Last 10)': variance_10
                 })
@@ -144,6 +174,6 @@ for index, row in prop_df.iterrows():
 results_df = pd.DataFrame(results)
 
 # Save the results to a CSV file
-results_df.to_csv("nba_predictions.csv", index=False)
+results_df.to_csv("nba_predictions_distribution.csv", index=False)
 
-print("Predictions saved to nba_predictions.csv")
+print("Predictions saved to nba_predictions_distribution.csv")

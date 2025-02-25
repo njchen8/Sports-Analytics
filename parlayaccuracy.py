@@ -92,7 +92,7 @@ def calculate_parlay_accuracy(predictions_df, parlay_legs):
 
 def main():
     # Read predictions from CSV
-    predictions_csv = "nba_predictions_with_probabilities_over_under_sorted.csv"
+    predictions_csv = "nba_predictions_distribution_with_probabilities_over_under_sorted.csv"
     predictions_df = pd.read_csv(predictions_csv)
     
     # Fetch actual performance from the NBA API for each prediction row.
@@ -123,7 +123,7 @@ def main():
     print(f"\nOverall hit percentage for props with Positive R²: {positive_hit_pct:.2f}% (Count: {len(positive_df)})")
     
     # Group predictions by probability buckets.
-    bins = [0, 0.5, 0.6, 0.7, 0.8, 1.0]
+    bins = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     predictions_df['Prob_Bin'] = pd.cut(predictions_df['Probability'], bins)
     
     hit_rates_by_prob = predictions_df.groupby('Prob_Bin')['Hit'].mean() * 100
