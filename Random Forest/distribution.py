@@ -106,9 +106,28 @@ def predict_player_stat_distribution(player_name, opponent_team, home_game, stat
     predictions_adjusted = np.random.normal(np.mean(predictions), np.std(predictions) * variance_factor, len(predictions))
 
     # Calculate probabilities
+    if prop_line > 8.0:  # Adjust this threshold based on your data and domain knowledge
+        variance_factor = 1.5
+        predictions_adjusted = np.random.normal(np.mean(predictions), np.std(predictions) * variance_factor, len(predictions))
+        distribution_type = "normal"
+    else:
+        mean_prediction = np.mean(predictions)
+        predictions_adjusted = np.random.poisson(mean_prediction, len(predictions))
+        distribution_type = "poisson"
+
+    # Calculate probabilities
     probs = {}
-    for i in range(int(min(predictions_adjusted)), int(max(predictions_adjusted)) + 2):
-        probs[i] = np.mean(predictions_adjusted >= i) - np.mean(predictions_adjusted >= i + 1)
+    if distribution_type == "poisson":
+        max_value = int(max(predictions_adjusted) * 2) #expand the range a little for poisson
+        for i in range(0, max_value + 1):
+            probs[i] = np.mean(predictions_adjusted == i)
+    else:
+        for i in range(int(min(predictions_adjusted)), int(max(predictions_adjusted)) + 2):
+            probs[i] = np.mean(predictions_adjusted >= i) - np.mean(predictions_adjusted >= i + 1)
+
+    # Ensure probabilities are non-negative
+    for key, value in probs.items():
+        probs[key] = max(0, value)
 
     # Clean distribution to remove jumps
     cleaned_probs = {}
@@ -131,7 +150,7 @@ def predict_player_stat_distribution(player_name, opponent_team, home_game, stat
     print(f"  -> Variance of last 10 games: {variance_10:.3f}")
 
     # Check if mean prediction is too far from prop line
-    std_dev = player_df[target_variable].std()
+    std_dev = player_df[target_variable].tail(10).std()
     mean_prediction = np.mean(predictions)
     if abs(mean_prediction - prop_line) > std_dev:
         print(f"  -> Prediction too far from prop line: {player_name}, {stat_type}")
@@ -141,7 +160,17 @@ def predict_player_stat_distribution(player_name, opponent_team, home_game, stat
     for stat_val, prob in cleaned_probs.items():
         print(f"    {stat_val}: {prob:.4f}")
 
-    return cleaned_probs, r2_backtest, variance_10
+    if distribution_type == "poisson":
+        over_probability = sum(probs[i] for i in probs if i > prop_line)
+        under_probability = sum(probs[i] for i in probs if i <= prop_line)
+    else:
+        over_probability = sum(probs[i] for i in probs if i > prop_line)
+        under_probability = sum(probs[i] for i in probs if i <= prop_line)
+
+    print(f"  -> Probability over {prop_line}: {over_probability:.4f}")
+    print(f"  -> Probability under {prop_line}: {under_probability:.4f}")
+
+    return cleaned_probs, r2_backtest, variance_10, over_probability, under_probability
 
 results = []
 processed_combinations = set()
@@ -158,16 +187,19 @@ for index, row in prop_df.iterrows():
         if combination not in processed_combinations:
             result = predict_player_stat_distribution(player, opponent, home_away, stat, prop_line)
             if result is not None:
-                predicted_distribution, r2_backtest, variance_10 = result
+                predicted_distribution, r2_backtest, variance_10, over_probability, under_probability = result #Modified line
                 results.append({
                     'Player': player,
                     'Opponent Team': opponent,
                     'Home Team': row['Home Team'],
                     'Stat Type': stat,
                     'Prop Line': prop_line,
-                    'Predicted Distribution': predicted_distribution,
                     'R^2 Value': r2_backtest,
-                    'Variance (Last 10)': variance_10
+                    'Variance (Last 10)': variance_10,
+                    'Over Probability': over_probability,
+                    'Under Probability': under_probability,
+                    'Predicted Distribution': predicted_distribution
+                    
                 })
             processed_combinations.add(combination)
 
