@@ -13,7 +13,7 @@ def get_latest_stat(player_name, stat_type, season='2024-25'):
     player_list = players.find_players_by_full_name(player_name)
     if not player_list:
         print(f"NBA API: No data found for {player_name}.")
-        return None, None
+        return None, None, None
     player_id = player_list[0]['id']
     
     try:
@@ -23,24 +23,25 @@ def get_latest_stat(player_name, stat_type, season='2024-25'):
         log_df = gamelog.get_data_frames()[0]
     except Exception as e:
         print(f"NBA API: Error retrieving game log for {player_name}: {e}")
-        return None, None
+        return None, None, None
     
     if log_df.empty:
         print(f"NBA API: No game log data for {player_name}.")
-        return None, None
+        return None, None, None
 
     # Use the most recent game (assumes log is sorted descending by game date)
     latest_game = log_df.iloc[0]
     latest_game_date = latest_game['GAME_DATE']
+    opponent = latest_game['MATCHUP'].split()[-1]  # Extract opponent team abbreviation
     
     if stat_type == 'points':
-        return latest_game['PTS'], latest_game_date
+        return latest_game['PTS'], latest_game_date, opponent
     elif stat_type == 'rebounds':
-        return latest_game['REB'], latest_game_date
+        return latest_game['REB'], latest_game_date, opponent
     elif stat_type == 'assists':
-        return latest_game['AST'], latest_game_date
+        return latest_game['AST'], latest_game_date, opponent
     else:
-        return None, None
+        return None, None, None
 
 def compute_hit(row):
     """
@@ -54,42 +55,6 @@ def compute_hit(row):
     else:
         return 1 if row['Actual Value'] <= row['Prop Line'] else 0
 
-def calculate_parlay_accuracy(predictions_df, parlay_legs):
-    """Calculates the accuracy of a single parlay."""
-    leg_results = []
-
-    for leg in parlay_legs:
-        player, stat_type, prop_line_str = leg.split('|')
-        prop_line = float(prop_line_str)
-
-        leg_data = predictions_df[
-            (predictions_df['Player'] == player) &
-            (predictions_df['Stat Type'] == stat_type) &
-            (predictions_df['Prop Line'] == prop_line)
-        ]
-
-        if not leg_data.empty:
-            actual_value = leg_data['Actual Value'].iloc[0]
-            over_under = leg_data['Over/Under'].iloc[0]
-            game_date = leg_data['Game Date'].iloc[0]
-
-            if pd.isna(actual_value):
-                return None  # Missing actual value, parlay is invalid
-            if game_date > datetime.now().strftime('%Y-%m-%d'):
-                return None #game hasnt happened yet.
-
-            if over_under == 'over':
-                leg_results.append(actual_value >= prop_line)
-            else:
-                leg_results.append(actual_value <= prop_line)
-        else:
-            return None  # Leg not found in predictions, parlay is invalid
-
-    if all(leg_results):
-        return 1  # Parlay hit
-    else:
-        return 0  # Parlay missed
-
 def main():
     # Read predictions from CSV
     predictions_csv = "NBA_Predictions.csv"
@@ -98,14 +63,20 @@ def main():
     # Fetch actual performance from the NBA API for each prediction row.
     actual_values = []
     game_dates = []
+    opponents = []
 
     for index, row in predictions_df.iterrows():
-        actual_value, game_date = get_latest_stat(row['Player'], row['Stat Type'])
+        actual_value, game_date, opponent = get_latest_stat(row['Player'], row['Stat Type'])
         actual_values.append(actual_value)
         game_dates.append(game_date)
+        opponents.append(opponent)
 
     predictions_df['Actual Value'] = actual_values
     predictions_df['Game Date'] = game_dates
+    predictions_df['Actual Opponent'] = opponents
+
+    # Filter out rows where the actual opponent does not match the predicted opponent
+    predictions_df = predictions_df[predictions_df['Actual Opponent'] == predictions_df['Opponent Team']]
 
     # Compute whether each prediction was a hit
     predictions_df['Hit'] = predictions_df.apply(compute_hit, axis=1)
@@ -124,12 +95,22 @@ def main():
     
     # Group predictions by probability buckets.
     bins = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-    predictions_df['Prob_Bin'] = pd.cut(predictions_df['Probability'], bins)
+    labels = ['0.5-0.6', '0.6-0.7', '0.7-0.8', '0.8-0.9', '0.9-1.0']
+    predictions_df['Prob_Bin'] = pd.cut(predictions_df['Probability'], bins=bins, labels=labels)
+    
+    # Calculate hit rates by probability bins
+    hit_rates_by_prob = predictions_df.groupby('Prob_Bin', observed=False)['Hit'].mean() * 100
+    counts_by_prob = predictions_df.groupby('Prob_Bin', observed=False).size()
+    print("\nHit percentages by Probability bins:")
+    for bin_label, hit_rate in hit_rates_by_prob.items():
+        count = counts_by_prob[bin_label]
+        print(f"{bin_label}: {hit_rate:.2f}% (Count: {count})")
     
     # Add bins for prop line ranges
-    prop_line_bins = [0, 5, 10, 15, 20, 25, float('inf')]
-    prop_line_labels = ['0-5', '5-10', '10-15', '15-20', '20-25', '25+']
-    predictions_df['Prop_Line_Bin'] = pd.cut(predictions_df['Prop Line'], bins=prop_line_bins, labels=prop_line_labels)
+    bins = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    labels = ['0.0-0.5', '0.5-0.6', '0.6-0.7', '0.7-0.8', '0.8-0.9', '0.9-1.0']
+    predictions_df['Prob_Bin'] = pd.cut(predictions_df['Probability'], bins=bins, labels=labels)
+
     
     # Calculate hit rates by prop line bins
     hit_rates_by_prop_line = predictions_df.groupby('Prop_Line_Bin', observed=False)['Hit'].mean() * 100
