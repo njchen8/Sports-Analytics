@@ -92,7 +92,7 @@ def calculate_parlay_accuracy(predictions_df, parlay_legs):
 
 def main():
     # Read predictions from CSV
-    predictions_csv = "nba_predictions_distribution_with_probabilities_over_under_sorted.csv"
+    predictions_csv = "NBA_Predictions.csv"
     predictions_df = pd.read_csv(predictions_csv)
     
     # Fetch actual performance from the NBA API for each prediction row.
@@ -132,16 +132,16 @@ def main():
     predictions_df['Prop_Line_Bin'] = pd.cut(predictions_df['Prop Line'], bins=prop_line_bins, labels=prop_line_labels)
     
     # Calculate hit rates by prop line bins
-    hit_rates_by_prop_line = predictions_df.groupby('Prop_Line_Bin')['Hit'].mean() * 100
-    counts_by_prop_line = predictions_df.groupby('Prop_Line_Bin').size()
+    hit_rates_by_prop_line = predictions_df.groupby('Prop_Line_Bin', observed=False)['Hit'].mean() * 100
+    counts_by_prop_line = predictions_df.groupby('Prop_Line_Bin', observed=False).size()
     print("\nHit percentages by Prop Line bins:")
     for bin_label, hit_rate in hit_rates_by_prop_line.items():
         count = counts_by_prop_line[bin_label]
         print(f"{bin_label}: {hit_rate:.2f}% (Count: {count})")
     
     # Calculate hit rates by stat type and over/under
-    hit_rates_by_stat_over_under = predictions_df.groupby(['Stat Type', 'Over/Under'])['Hit'].mean() * 100
-    counts_by_stat_over_under = predictions_df.groupby(['Stat Type', 'Over/Under']).size()
+    hit_rates_by_stat_over_under = predictions_df.groupby(['Stat Type', 'Over/Under'], observed=False)['Hit'].mean() * 100
+    counts_by_stat_over_under = predictions_df.groupby(['Stat Type', 'Over/Under'], observed=False).size()
     print("\nHit percentages by Stat Type and Over/Under:")
     for (stat_label, over_under_label), hit_rate in hit_rates_by_stat_over_under.items():
         count = counts_by_stat_over_under[(stat_label, over_under_label)]

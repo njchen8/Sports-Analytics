@@ -172,22 +172,32 @@ def predict_player_stat_distribution(player_name, opponent_team, home_game, stat
 
     return cleaned_probs, r2_backtest, variance_10, over_probability, under_probability
 
+
+# Define the stat types we are interested in
+stat_types = ['points', 'rebounds', 'assists']
+
+# Initialize an empty list to store results
 results = []
+
+# Initialize a set to keep track of processed player-stat combinations
 processed_combinations = set()
 
+# Iterate over each row in the dataframe
 for index, row in prop_df.iterrows():
     player = row['Player']
     opponent = row['Opponent Team']
     home_away = 'home' if row['Home Team'] == row['Current Team'] else 'away'
     prop_line = row['Prop Line']
-    stat_types = ['points', 'rebounds', 'assists']
+    stat = row['Stat Type']  # Assuming the column name for the stat type is 'Stat Type'
 
-    for stat in stat_types:
+    # Only process if the stat type is in our list of interest
+    if stat in stat_types:
         combination = (player, stat)
         if combination not in processed_combinations:
             result = predict_player_stat_distribution(player, opponent, home_away, stat, prop_line)
             if result is not None:
-                predicted_distribution, r2_backtest, variance_10, over_probability, under_probability = result #Modified line
+                predicted_distribution, r2_backtest, variance_10, over_probability, under_probability = result
+                probability = over_probability if over_probability >= under_probability else under_probability
                 results.append({
                     'Player': player,
                     'Opponent Team': opponent,
@@ -196,17 +206,17 @@ for index, row in prop_df.iterrows():
                     'Prop Line': prop_line,
                     'R^2 Value': r2_backtest,
                     'Variance (Last 10)': variance_10,
+                    'Probability': probability,
                     'Over Probability': over_probability,
                     'Under Probability': under_probability,
                     'Predicted Distribution': predicted_distribution
-                    
                 })
             processed_combinations.add(combination)
 
+# Convert the results list to a DataFrame
 results_df = pd.DataFrame(results)
 
-# Save the results to a CSV file
-results_df = results_df.sort_values(by='Probability', ascending=False)
+
 results_df.to_csv("nba_predictions_distribution.csv", index=False)
 
 print("Predictions saved to nba_predictions_distribution.csv")
