@@ -126,19 +126,26 @@ def main():
     bins = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     predictions_df['Prob_Bin'] = pd.cut(predictions_df['Probability'], bins)
     
-    hit_rates_by_prob = predictions_df.groupby('Prob_Bin')['Hit'].mean() * 100
-    counts_by_prob = predictions_df.groupby('Prob_Bin').size()
-    print("\nHit percentages by Probability bins (overall):")
-    for bin_label, hit_rate in hit_rates_by_prob.items():
-        count = counts_by_prob[bin_label]
+    # Add bins for prop line ranges
+    prop_line_bins = [0, 5, 10, 15, 20, 25, float('inf')]
+    prop_line_labels = ['0-5', '5-10', '10-15', '15-20', '20-25', '25+']
+    predictions_df['Prop_Line_Bin'] = pd.cut(predictions_df['Prop Line'], bins=prop_line_bins, labels=prop_line_labels)
+    
+    # Calculate hit rates by prop line bins
+    hit_rates_by_prop_line = predictions_df.groupby('Prop_Line_Bin')['Hit'].mean() * 100
+    counts_by_prop_line = predictions_df.groupby('Prop_Line_Bin').size()
+    print("\nHit percentages by Prop Line bins:")
+    for bin_label, hit_rate in hit_rates_by_prop_line.items():
+        count = counts_by_prop_line[bin_label]
         print(f"{bin_label}: {hit_rate:.2f}% (Count: {count})")
     
-    hit_rates_by_group = predictions_df.groupby(['R^2 Group', 'Prob_Bin'])['Hit'].mean() * 100
-    counts_by_group = predictions_df.groupby(['R^2 Group', 'Prob_Bin']).size()
-    print("\nHit percentages by R² Group and Probability bins:")
-    for (r2_group, bin_label), hit_rate in hit_rates_by_group.items():
-        count = counts_by_group[(r2_group, bin_label)]
-        print(f"{r2_group}, {bin_label}: {hit_rate:.2f}% (Count: {count})")
+    # Calculate hit rates by stat type and over/under
+    hit_rates_by_stat_over_under = predictions_df.groupby(['Stat Type', 'Over/Under'])['Hit'].mean() * 100
+    counts_by_stat_over_under = predictions_df.groupby(['Stat Type', 'Over/Under']).size()
+    print("\nHit percentages by Stat Type and Over/Under:")
+    for (stat_label, over_under_label), hit_rate in hit_rates_by_stat_over_under.items():
+        count = counts_by_stat_over_under[(stat_label, over_under_label)]
+        print(f"{stat_label} {over_under_label}: {hit_rate:.2f}% (Count: {count})")
     
     # Identify best conditions: for example, high probability (>= 0.8) and positive R².
     best_conditions = predictions_df[
@@ -154,7 +161,7 @@ def main():
     print("\nProp Line vs. Actual Result:")
     for index, row in predictions_df.iterrows():
         hit_status = "Hit" if row['Hit'] == 1 else "Miss" if row['Hit'] == 0 else "N/A"
-        print(f"Player: {row['Player']}, Stat: {row['Stat Type']}, Prop Line: {row['Prop Line']}, Actual: {row['Actual Value']}, Predicted Value: {row['Predicted Value']}, Result: {hit_status}")
+        print(f"Player: {row['Player']}, Stat: {row['Stat Type']}, Prop Line: {row['Prop Line']}, Actual: {row['Actual Value']}, Result: {hit_status}")
     
 if __name__ == '__main__':
     main()

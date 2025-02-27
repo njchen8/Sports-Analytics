@@ -206,6 +206,7 @@ for index, row in prop_df.iterrows():
 results_df = pd.DataFrame(results)
 
 # Save the results to a CSV file
+results_df = results_df.sort_values(by='Probability', ascending=False)
 results_df.to_csv("nba_predictions_distribution.csv", index=False)
 
 print("Predictions saved to nba_predictions_distribution.csv")

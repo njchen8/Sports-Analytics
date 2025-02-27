@@ -67,8 +67,8 @@ predictions_df = predictions_df[predictions_df['Probability'] >= 0.5]
 predictions_df = predictions_df.sort_values(by='Probability', ascending=False)
 
 # Save the updated DataFrame to a new CSV file
-output_csv = "nba_predictions_distribution_with_probabilities_over_under_sorted.csv"
+output_csv = "NBA_PREDICTIONS.csv"
 predictions_df.to_csv(output_csv, index=False)
 
-print(f"Probabilities and Over/Under calculated, filtered, sorted, and saved to {output_csv}")
 print(predictions_df)
+print(f"Probabilities and Over/Under calculated, filtered, sorted, and saved to {output_csv}")
