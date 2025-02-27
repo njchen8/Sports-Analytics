@@ -93,10 +93,13 @@ def main():
     
     print(f"\nOverall hit percentage for props with Positive R²: {positive_hit_pct:.2f}% (Count: {len(positive_df)})")
     
-    # Group predictions by probability buckets.
+    # Add bins for prop line ranges
     bins = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-    labels = ['0.5-0.6', '0.6-0.7', '0.7-0.8', '0.8-0.9', '0.9-1.0']
-    predictions_df['Prob_Bin'] = pd.cut(predictions_df['Probability'], bins=bins, labels=labels)
+    predictions_df['Prob_Bin'] = pd.cut(predictions_df['Probability'], bins)
+    
+    prop_line_bins = [0, 5, 10, 15, 20, 25, float('inf')]
+    prop_line_labels = ['0-5', '5-10', '10-15', '15-20', '20-25', '25+']
+    predictions_df['Prop_Line_Bin'] = pd.cut(predictions_df['Prop Line'], bins=prop_line_bins, labels=prop_line_labels)
     
     # Calculate hit rates by probability bins
     hit_rates_by_prob = predictions_df.groupby('Prob_Bin', observed=False)['Hit'].mean() * 100
@@ -105,12 +108,6 @@ def main():
     for bin_label, hit_rate in hit_rates_by_prob.items():
         count = counts_by_prob[bin_label]
         print(f"{bin_label}: {hit_rate:.2f}% (Count: {count})")
-    
-    # Add bins for prop line ranges
-    bins = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-    labels = ['0.0-0.5', '0.5-0.6', '0.6-0.7', '0.7-0.8', '0.8-0.9', '0.9-1.0']
-    predictions_df['Prob_Bin'] = pd.cut(predictions_df['Probability'], bins=bins, labels=labels)
-
     
     # Calculate hit rates by prop line bins
     hit_rates_by_prop_line = predictions_df.groupby('Prop_Line_Bin', observed=False)['Hit'].mean() * 100
