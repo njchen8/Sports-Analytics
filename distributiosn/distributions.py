@@ -39,7 +39,7 @@ results = []
 
 for player in fixed_data['Player'].unique():
     print(f"Processing player: {player}")
-    player_logs = game_logs[game_logs['PLAYER_NAME'] == player].sort_values(by='GAME_DATE', ascending=False).head(30)
+    player_logs = game_logs[game_logs['PLAYER_NAME'] == player].sort_values(by='GAME_DATE', ascending=False).head(100)
     
     if player_logs.empty:
         print(f"No logs found for player: {player}")
@@ -62,22 +62,22 @@ for player in fixed_data['Player'].unique():
         'Points Std Dev': points_distribution.std(*points_params),
         'Points Distribution': points_distribution.name,
         'Points MSE': points_mse,
-        'Points Params': points_params,
+        'Points Params': [float(param) for param in points_params],
         'Rebounds Mean': rebounds_distribution.mean(*rebounds_params),
         'Rebounds Std Dev': rebounds_distribution.std(*rebounds_params),
         'Rebounds Distribution': rebounds_distribution.name,
         'Rebounds MSE': rebounds_mse,
-        'Rebounds Params': rebounds_params,
+        'Rebounds Params': [float(param) for param in rebounds_params],
         'Assists Mean': assists_distribution.mean(*assists_params),
         'Assists Std Dev': assists_distribution.std(*assists_params),
         'Assists Distribution': assists_distribution.name,
         'Assists MSE': assists_mse,
-        'Assists Params': assists_params,
+        'Assists Params': [float(param) for param in assists_params],
         'Total Mean': total_distribution.mean(*total_params),
         'Total Std Dev': total_distribution.std(*total_params),
         'Total Distribution': total_distribution.name,
         'Total MSE': total_mse,
-        'Total Params': total_params,
+        'Total Params': [float(param) for param in total_params],
     })
 
 # Convert results to DataFrame and save to CSV
