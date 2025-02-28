@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.metrics import mean_squared_error
+from scipy.stats import kstest
 import warnings
 from scipy.stats import norm, beta, expon, chi2, t, f, pareto, rayleigh, cauchy, triang, laplace, uniform, logistic, gumbel_r, gumbel_l, gamma, weibull_min, invgauss, genextreme
 
@@ -10,13 +10,6 @@ warnings.filterwarnings("ignore")
 team_stats = pd.read_csv('team_stats.csv')
 game_logs = pd.read_csv('nba_players_game_logs_2018_25.csv')
 fixed_data = pd.read_csv('fixed_data.csv')
-
-# Function to calculate weighted mean and standard deviation
-def weighted_stats(values, weights):
-    weighted_mean = np.sum(values * weights) / np.sum(weights)
-    weighted_variance = np.sum(weights * (values - weighted_mean) ** 2) / np.sum(weights)
-    weighted_std = np.sqrt(weighted_variance)
-    return weighted_mean, weighted_std
 
 # Function to fit distributions and choose the best one
 def fit_best_distribution(data):
@@ -31,11 +24,10 @@ def fit_best_distribution(data):
     for distribution in distributions:
         print(f"Trying distribution: {distribution.name}")
         params = distribution.fit(data.replace([np.inf, -np.inf], np.nan).dropna())
-        fitted_data = distribution.pdf(np.arange(len(data)), *params)
-        mse = mean_squared_error(data, fitted_data)
-        print(f"Mean Squared Error for {distribution.name}: {mse}")
-        if mse < best_mse:
-            best_mse = mse
+        ks_stat, p_value = kstest(data, distribution.name, args=params)
+        print(f"KS Statistic for {distribution.name}: {ks_stat}, p-value: {p_value}")
+        if ks_stat < best_mse:
+            best_mse = ks_stat
             best_distribution = distribution
             best_params = params
 
@@ -47,7 +39,7 @@ results = []
 
 for player in fixed_data['Player'].unique():
     print(f"Processing player: {player}")
-    player_logs = game_logs[game_logs['PLAYER_NAME'] == player].sort_values(by='GAME_DATE', ascending=False).head(50)
+    player_logs = game_logs[game_logs['PLAYER_NAME'] == player].sort_values(by='GAME_DATE', ascending=False).head(30)
     
     if player_logs.empty:
         print(f"No logs found for player: {player}")
@@ -56,31 +48,36 @@ for player in fixed_data['Player'].unique():
     print(f"Player logs for {player}:")
     print(player_logs)
     
-    # Decaying weights
-    weights = np.exp(-0.05 * np.arange(len(player_logs)))  # Adjusted decay factor
-    
-    points_mean, points_std = weighted_stats(player_logs['PTS'], weights)
-    rebounds_mean, rebounds_std = weighted_stats(player_logs['REB'], weights)
-    assists_mean, assists_std = weighted_stats(player_logs['AST'], weights)
-    
     points_distribution, points_params, points_mse = fit_best_distribution(player_logs['PTS'].replace([np.inf, -np.inf], np.nan).dropna())
     rebounds_distribution, rebounds_params, rebounds_mse = fit_best_distribution(player_logs['REB'].replace([np.inf, -np.inf], np.nan).dropna())
     assists_distribution, assists_params, assists_mse = fit_best_distribution(player_logs['AST'].replace([np.inf, -np.inf], np.nan).dropna())
     
+    # Calculate total points + rebounds + assists
+    total_stats = player_logs['PTS'] + player_logs['REB'] + player_logs['AST']
+    total_distribution, total_params, total_mse = fit_best_distribution(total_stats.replace([np.inf, -np.inf], np.nan).dropna())
+    
     results.append({
         'Player': player,
-        'Points Mean': points_mean,
-        'Points Std Dev': points_std,
+        'Points Mean': points_distribution.mean(*points_params),
+        'Points Std Dev': points_distribution.std(*points_params),
         'Points Distribution': points_distribution.name,
         'Points MSE': points_mse,
-        'Rebounds Mean': rebounds_mean,
-        'Rebounds Std Dev': rebounds_std,
+        'Points Params': points_params,
+        'Rebounds Mean': rebounds_distribution.mean(*rebounds_params),
+        'Rebounds Std Dev': rebounds_distribution.std(*rebounds_params),
         'Rebounds Distribution': rebounds_distribution.name,
         'Rebounds MSE': rebounds_mse,
-        'Assists Mean': assists_mean,
-        'Assists Std Dev': assists_std,
+        'Rebounds Params': rebounds_params,
+        'Assists Mean': assists_distribution.mean(*assists_params),
+        'Assists Std Dev': assists_distribution.std(*assists_params),
         'Assists Distribution': assists_distribution.name,
         'Assists MSE': assists_mse,
+        'Assists Params': assists_params,
+        'Total Mean': total_distribution.mean(*total_params),
+        'Total Std Dev': total_distribution.std(*total_params),
+        'Total Distribution': total_distribution.name,
+        'Total MSE': total_mse,
+        'Total Params': total_params,
     })
 
 # Convert results to DataFrame and save to CSV
