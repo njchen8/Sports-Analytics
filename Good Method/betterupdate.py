@@ -28,12 +28,18 @@ player_names = fixed_data_df["Player"].unique()
 
 # Load existing game logs
 if os.path.exists(CSV_FILE):
-    game_logs_df = pd.read_csv(CSV_FILE, low_memory=False, usecols=["PLAYER_ID", "GAME_ID"])
-    existing_games = set(zip(game_logs_df["PLAYER_ID"], game_logs_df["GAME_ID"]))
-    print(f"Loaded existing data: {len(existing_games)} games found.")
+    game_logs_df = pd.read_csv(CSV_FILE, low_memory=False)
+    if "PLAYER_ID" in game_logs_df.columns and "GAME_ID" in game_logs_df.columns:
+        existing_games = set(zip(game_logs_df["PLAYER_ID"], game_logs_df["GAME_ID"]))
+        print(f"Loaded existing data: {len(existing_games)} games found.")
+    else:
+        print("Could not find PLAYER_ID and GAME_ID columns.")
+        existing_games = set()
+        game_logs_df = pd.DataFrame() #create an empty dataframe.
 else:
     existing_games = set()
     print("No existing game logs found. Creating new dataset.")
+    game_logs_df = pd.DataFrame() #create an empty dataframe.
 
 # Cache for player IDs
 player_ids = {}
@@ -124,10 +130,14 @@ for player in player_names:
 
     time.sleep(0.1)  # Avoid rate limiting
 
-# Append new data to CSV if there are new records
+# Combine existing and new data and overwrite CSV
 if new_games_list:
     new_games_df = pd.concat(new_games_list, ignore_index=True)
-    new_games_df.to_csv(CSV_FILE, mode='a', header=not os.path.exists(CSV_FILE), index=False)
-    print(f"\n📌 Appended {len(new_games_df)} new games to {CSV_FILE}")
+    combined_df = pd.concat([game_logs_df, new_games_df], ignore_index=True)
+    combined_df.drop_duplicates(subset=['PLAYER_ID', 'GAME_ID'], keep='first', inplace=True)
+
+    # Write the combined data to a new CSV file
+    combined_df.to_csv(CSV_FILE, index=False)
+    print(f"\n📌 Wrote new data to {CSV_FILE}.")
 else:
     print("\n✅ No new games found. Data is already up to date.")
