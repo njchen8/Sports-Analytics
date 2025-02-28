@@ -39,7 +39,7 @@ results = []
 
 for player in fixed_data['Player'].unique():
     print(f"Processing player: {player}")
-    player_logs = game_logs[game_logs['PLAYER_NAME'] == player].sort_values(by='GAME_DATE', ascending=False).head(100)
+    player_logs = game_logs[game_logs['PLAYER_NAME'] == player].sort_values(by='GAME_DATE', ascending=False).head(69)
     
     if player_logs.empty:
         print(f"No logs found for player: {player}")
