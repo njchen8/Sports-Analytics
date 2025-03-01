@@ -87,8 +87,14 @@ def calculate_probability(row, player_stats):
         else:
             print(f"Degrees of freedom missing for distribution: {dist_name}. Using default probability.")
             return 0.5, 'under'  # or some default probability
-    elif dist_name == 'expon':
-        prob = distribution.cdf(prop_line, scale=1/mean)
+    elif dist_name == 'invgauss':
+        mu = player_stat.get('Mu', None)
+        if mu is not None:
+            prob = distribution.cdf(prop_line, mu, loc=mean, scale=std)
+        else:
+            print(f"Mu parameter missing for distribution: {dist_name}. Using default probability.")
+            return 0.5, 'under'  # or some default probability
+        prob = distribution.cdf(prop_line, scale=mean)
     else:
         prob = distribution.cdf(prop_line, loc=mean, scale=std)
     
