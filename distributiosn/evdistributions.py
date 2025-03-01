@@ -41,6 +41,10 @@ def calculate_probability(row, player_stats):
     prop_line = row['Prop Line']
     stat_type = row['Stat Type']
     
+    if stat_type == 'period_1_points':
+        print(f"Ignoring stat type: {stat_type} for player: {player}")
+        return None, None
+    
     print(f"Calculating probability for player: {player}, stat type: {stat_type}, prop line: {prop_line}")
     
     player_stat = player_stats[player_stats['Player'] == player]
@@ -106,6 +110,11 @@ def calculate_probability(row, player_stats):
 # Calculate probabilities for all stat types
 print("Calculating probabilities for all rows...")
 fixed_data[['Probability', 'Bet']] = fixed_data.apply(lambda row: calculate_probability(row, player_stats), axis=1, result_type='expand')
+# Remove rows with None probabilities
+fixed_data = fixed_data.dropna(subset=['Probability'])
+
+# Keep only rows where probability > 0.5
+fixed_data = fixed_data[fixed_data['Probability'] > 0.5]
 
 # Sort by probability
 print("Sorting data by probability...")

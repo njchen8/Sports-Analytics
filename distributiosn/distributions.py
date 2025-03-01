@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.stats import kstest
 import warnings
-from scipy.stats import norm, beta, expon, chi2, t, f, pareto, rayleigh, cauchy, triang, laplace, uniform, logistic, gumbel_r, gumbel_l, gamma, weibull_min, invgauss, genextreme
+from scipy.stats import norm, beta, expon, chi2, t, f, pareto, rayleigh, cauchy, laplace, uniform, logistic, gumbel_r, gumbel_l, gamma, weibull_min, invgauss, genextreme
 
 warnings.filterwarnings("ignore")
 
@@ -15,7 +15,7 @@ fixed_data = pd.read_csv('fixed_data.csv')
 def fit_best_distribution(data):
     print("Fitting distributions for data...")
     distributions = [
-        norm, beta, expon, chi2, t, f, pareto, rayleigh, cauchy, triang, laplace, uniform, logistic, gumbel_r, gumbel_l, gamma, weibull_min, invgauss, genextreme
+        norm, beta, expon, chi2, t, f, pareto, rayleigh, cauchy, laplace, uniform, logistic, gumbel_r, gumbel_l, gamma, weibull_min, invgauss, genextreme
     ]
     best_distribution = None
     best_mse = float('inf')
