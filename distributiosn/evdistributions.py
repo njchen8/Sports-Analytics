@@ -87,8 +87,10 @@ def calculate_probability(row, player_stats):
         else:
             print(f"Degrees of freedom missing for distribution: {dist_name}. Using default probability.")
             return 0.5, 'under'  # or some default probability
+    elif dist_name == 'expon':
+        prob = distribution.cdf(prop_line, scale=1/mean)
     else:
-        prob = distribution.cdf(prop_line, mean, std)
+        prob = distribution.cdf(prop_line, loc=mean, scale=std)
     
     final_prob = max(prob, 1 - prob)
     bet = 'over' if 1 - prob > prob else 'under'
