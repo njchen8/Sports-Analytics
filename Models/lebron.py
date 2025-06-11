@@ -32,8 +32,26 @@ df.sort_values(["PLAYER_ID", "GAME_DATE"], inplace=True)
 LEBRON_ID = 2544  # Example PLAYER_ID for LeBron James
 df = df[df["PLAYER_ID"] == LEBRON_ID].reset_index(drop=True)  # Reset index after filtering
 
-# Define test_mask to split data into training and testing sets
-test_mask = df["SEASON_YEAR"] == "2024-25"  # Adjust column name if necessary
+# Filter for 2024-25 season only
+season_2024_25_df = df[df["SEASON_YEAR"] == "2024-25"].copy()
+
+if season_2024_25_df.empty:
+    print("No 2024-25 season data found for LeBron James")
+    exit()
+
+# Sort by game date to ensure chronological order
+season_2024_25_df = season_2024_25_df.sort_values("GAME_DATE").reset_index(drop=True)
+
+# Split into first 3/4 for training and last 1/4 for testing
+total_games = len(season_2024_25_df)
+train_size = int(total_games * 0.75)
+
+print(f"Total games in 2024-25 season: {total_games}")
+print(f"Training on first {train_size} games")
+print(f"Testing on last {total_games - train_size} games")
+
+train_df = season_2024_25_df.iloc[:train_size].copy()
+test_df = season_2024_25_df.iloc[train_size:].copy()
 
 # --------------------------------------------------------------
 # 2  FEATURE ENGINEERING
@@ -41,37 +59,45 @@ test_mask = df["SEASON_YEAR"] == "2024-25"  # Adjust column name if necessary
 # Add home_flag
 df["home_flag"] = df["MATCHUP"].apply(lambda x: 1 if "vs" in x else 0)
 
-# Add one-hot encoded opponent columns
+# Add one-hot encoded opponent columns (using all available data to get all possible opponents)
 opp_dummies = pd.get_dummies(df["OPP_TEAM"], prefix="opp")
 df = pd.concat([df, opp_dummies], axis=1)
+
+# Now apply the same opponent columns to our train/test splits
+train_df["home_flag"] = train_df["MATCHUP"].apply(lambda x: 1 if "vs" in x else 0)
+test_df["home_flag"] = test_df["MATCHUP"].apply(lambda x: 1 if "vs" in x else 0)
+
+# Add opponent dummy columns to train and test sets
+for col in opp_dummies.columns:
+    train_df[col] = 0
+    test_df[col] = 0
+
+# Activate appropriate opponent features
+for idx, row in train_df.iterrows():
+    opponent = row["OPP_TEAM"]
+    if f"opp_{opponent}" in opp_dummies.columns:
+        train_df.loc[idx, f"opp_{opponent}"] = 1
+
+for idx, row in test_df.iterrows():
+    opponent = row["OPP_TEAM"]
+    if f"opp_{opponent}" in opp_dummies.columns:
+        test_df.loc[idx, f"opp_{opponent}"] = 1
 
 # Merge team stats for the player's team
 team_cols = ["OFF_RATING", "DEF_RATING", "NET_RATING", "PACE", "AST_RATIO", "REB_PCT"]
 t_own = t_df.rename(columns={col: f"TEAM_{col}" for col in team_cols})
-df = df.merge(t_own, on="TEAM_ABBREVIATION", how="left")
+train_df = train_df.merge(t_own, on="TEAM_ABBREVIATION", how="left")
+test_df = test_df.merge(t_own, on="TEAM_ABBREVIATION", how="left")
 
 # Merge team stats for the opponent's team
 t_opp = t_df.rename(columns={"TEAM_ABBREVIATION": "OPP_TEAM", **{col: f"OPP_{col}" for col in team_cols}})
-df = df.merge(t_opp, on="OPP_TEAM", how="left")
+train_df = train_df.merge(t_opp, on="OPP_TEAM", how="left")
+test_df = test_df.merge(t_opp, on="OPP_TEAM", how="left")
 
-# Create player_idx column
-player2idx = {pid: i for i, pid in enumerate(df["PLAYER_ID"].unique())}
-df["player_idx"] = df["PLAYER_ID"].map(player2idx)
-
-# Filter training data to only include the past year
-most_recent_date = df["GAME_DATE"].max()
-one_year_ago = most_recent_date - timedelta(days=365)
-
-# For each player, include only games from the past year or all available games if less than a year
-train_df = df.loc[~test_mask].groupby("PLAYER_ID", group_keys=False).apply(
-    lambda group: group[group["GAME_DATE"] >= one_year_ago] if group["GAME_DATE"].min() < one_year_ago else group
-).reset_index(drop=True)
-
-test_df = df.loc[test_mask].reset_index(drop=True)
-
-# Ensure all necessary columns are in train_df and test_df
-train_df = train_df[list(df.columns)]
-test_df = test_df[list(df.columns)]
+# Create player_idx column (will be 0 for LeBron since he's the only player)
+player2idx = {LEBRON_ID: 0}
+train_df["player_idx"] = 0
+test_df["player_idx"] = 0
 
 # --------------------------------------------------------------
 # 2-B  DESIGN-MATRIX FEATURE LIST
@@ -83,6 +109,12 @@ feature_cols = (
     [f"TEAM_{c}" for c in team_cols] +                         # Team stats
     [f"OPP_{c}"  for c in team_cols]                           # Opponent stats
 )
+
+# Filter feature_cols to only include columns that exist in both train and test sets
+available_cols = set(train_df.columns) & set(test_df.columns)
+feature_cols = [col for col in feature_cols if col in available_cols]
+
+print(f"Using {len(feature_cols)} features for modeling")
 
 # ---- Build numeric DataFrames, coerce non-numerics, fill NaNs ----
 X_train_df = train_df[feature_cols].copy()
@@ -114,7 +146,8 @@ def activate_opp_features(df, opponent):
     """Activate only the relevant opp_* feature for the given opponent."""
     opp_cols = [col for col in df.columns if col.startswith("opp_")]
     df[opp_cols] = 0  # Deactivate all opp_* features
-    df[f"opp_{opponent}"] = 1  # Activate the relevant opponent feature
+    if f"opp_{opponent}" in df.columns:
+        df[f"opp_{opponent}"] = 1  # Activate the relevant opponent feature
     return df
 
 # --------------------------------------------------------------
@@ -153,26 +186,28 @@ if __name__ == '__main__':
             trace = pm.sample(500, tune=500, target_accept=0.99, chains=4, cores=1)
 
             # Posterior predictive for TEST SET
-            for opponent in test_df["OPP_TEAM"].unique():
-                test_df = activate_opp_features(test_df, opponent)
-                X_test_std = (test_df[feature_cols].to_numpy(dtype="float64") - means) / stds
+            test_df_copy = test_df.copy()
+            
+            # Prepare test features
+            X_test_final = test_df_copy[feature_cols].apply(pd.to_numeric, errors="coerce").fillna(meds)
+            X_test_std_final = (X_test_final.to_numpy(dtype="float64") - means) / stds
+            
+            # Update the model with test data
+            pm.set_data({"x_data": X_test_std_final, "player_idx": test_df_copy["player_idx"].values}, model=model)
 
-                # Dynamically update the shape of x_data and player_idx
-                pm.set_data({"x_data": X_test_std, "player_idx": test_df["player_idx"].values}, model=model)
+            # Debug shapes during posterior predictive sampling
+            print(f"Shape of X_test_std_final: {X_test_std_final.shape}")
+            print(f"Shape of player_idx (test): {test_df_copy['player_idx'].values.shape}")
 
-                # Debug shapes during posterior predictive sampling
-                print(f"Shape of X_test_std: {X_test_std.shape}")
-                print(f"Shape of player_idx (test): {test_df['player_idx'].values.shape}")
+            # Sample posterior predictive
+            ppc = pm.sample_posterior_predictive(trace, var_names=["y"], random_seed=42)
+            draws = ppc.posterior_predictive["y"]
 
-                # Sample posterior predictive
-                ppc = pm.sample_posterior_predictive(trace, var_names=["y"], random_seed=42)
-                draws = ppc["y"]
-
-                pred_df = test_df[["GAME_ID", "PLAYER_ID", "GAME_DATE", target]].copy()
-                pred_df[f"{target}_mean"] = draws.mean(axis=0)
-                pred_df[f"{target}_lo"] = np.percentile(draws, 5, axis=0)
-                pred_df[f"{target}_hi"] = np.percentile(draws, 95, axis=0)
-                pred_frames.append(pred_df)
+            pred_df = test_df_copy[["GAME_ID", "PLAYER_ID", "GAME_DATE", target]].copy()
+            pred_df[f"{target}_mean"] = draws.mean(axis=(0, 1))  # Average over chains and draws
+            pred_df[f"{target}_lo"] = np.percentile(draws, 5, axis=(0, 1))
+            pred_df[f"{target}_hi"] = np.percentile(draws, 95, axis=(0, 1))
+            pred_frames.append(pred_df)
 
     # --------------------------------------------------------------
     # 5  MERGE & SAVE
