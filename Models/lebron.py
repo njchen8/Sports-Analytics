@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# bayes_negbin_player_props.py
+# bayes_negbin_player_props.py - ONLINE LEARNING VERSION
 # --------------------------------------------------------------
 import pandas as pd
 import numpy as np
@@ -8,32 +8,35 @@ import pymc as pm
 import arviz as az
 from datetime import timedelta
 import matplotlib.pyplot as plt
-from pytensor.tensor import reshape  # Add this import
+import warnings
+warnings.filterwarnings('ignore')
 
 # --------------------------------------------------------------
 # 1  CONFIG & DATA
 # --------------------------------------------------------------
 CSV_PLAYERS = Path("nba_players_game_logs_2018_25_clean.csv")
 CSV_TEAMS   = Path("team_stats.csv")
-OUT         = Path("lebron_preds.csv")
+OUT         = Path("lebron_preds_online.csv")
 
-ROLLS   = [5, 10]
+ROLLS   = [1, 3, 5, 10]
 TARGETS = ["PTS", "REB", "AST"]
+
+# Time weighting parameters
+DECAY_RATE = 0.05  # Higher = more emphasis on recent games (0.01-0.1 typical range)
+
+# Online learning parameters
+RETRAIN_FREQUENCY = 3  # Retrain model every N games (1 = every game, 3 = every 3 games)
+FAST_SAMPLING = True   # Use fewer samples for online updates
 
 # --------------------------------------------------------------
 # 1-A  LOAD DATASETS
 # --------------------------------------------------------------
 df = pd.read_csv(CSV_PLAYERS, parse_dates=["GAME_DATE"])
-t_df = pd.read_csv(CSV_TEAMS)
+team_stats = pd.read_csv(CSV_TEAMS)
 
-df.sort_values(["PLAYER_ID", "GAME_DATE"], inplace=True)
-
-# Filter for LeBron James (replace with LeBron's actual PLAYER_ID)
-LEBRON_ID = 2544  # Example PLAYER_ID for LeBron James
-df = df[df["PLAYER_ID"] == LEBRON_ID].reset_index(drop=True)  # Reset index after filtering
-
-# Filter for 2024-25 season only
-season_2024_25_df = df[df["SEASON_YEAR"] == "2024-25"].copy()
+# Filter for LeBron James only - 2024-25 season
+LEBRON_ID = 2544
+season_2024_25_df = df[(df["PLAYER_ID"] == LEBRON_ID) & (df["SEASON_YEAR"] == "2024-25")].copy()
 
 if season_2024_25_df.empty:
     print("No 2024-25 season data found for LeBron James")
@@ -42,202 +45,368 @@ if season_2024_25_df.empty:
 # Sort by game date to ensure chronological order
 season_2024_25_df = season_2024_25_df.sort_values("GAME_DATE").reset_index(drop=True)
 
-# Split into first 3/4 for training and last 1/4 for testing
+# Split into first 3/4 for initial training and last 1/4 for online testing
 total_games = len(season_2024_25_df)
-train_size = int(total_games * 0.75)
+initial_train_size = int(total_games * 0.75)
 
 print(f"Total games in 2024-25 season: {total_games}")
-print(f"Training on first {train_size} games")
-print(f"Testing on last {total_games - train_size} games")
-
-train_df = season_2024_25_df.iloc[:train_size].copy()
-test_df = season_2024_25_df.iloc[train_size:].copy()
+print(f"Initial training: first {initial_train_size} games")
+print(f"Online testing: last {total_games - initial_train_size} games")
+print(f"Retrain frequency: every {RETRAIN_FREQUENCY} games")
 
 # --------------------------------------------------------------
-# 2  FEATURE ENGINEERING
+# 2  HELPER FUNCTIONS FOR ONLINE LEARNING
 # --------------------------------------------------------------
-# Add home_flag
-df["home_flag"] = df["MATCHUP"].apply(lambda x: 1 if "vs" in x else 0)
 
-# Add one-hot encoded opponent columns (using all available data to get all possible opponents)
-opp_dummies = pd.get_dummies(df["OPP_TEAM"], prefix="opp")
-df = pd.concat([df, opp_dummies], axis=1)
+def prepare_features(data_df, opponent_stats, team_stat_cols, season_full_df, feature_cols):
+    """Prepare features for a subset of data"""
+    # Add basic features
+    data_df["home_flag"] = (data_df["MATCHUP"].str.contains("vs")).astype(int)
+    
+    # Merge opponent stats
+    data_df = data_df.merge(opponent_stats, on="OPP_TEAM", how="left")
+    
+    # Fill missing team stats
+    for col in team_stat_cols:
+        if col in data_df.columns:
+            data_df[col] = data_df[col].fillna(data_df[col].mean())
+    
+    # Calculate rolling averages using full season data up to this point
+    for target in TARGETS:
+        for roll in ROLLS:
+            col_name = f"{target.lower()}_roll_{roll}"
+            # Get the indices in the full season dataframe
+            indices = data_df.index
+            data_df[col_name] = season_full_df.loc[indices, col_name]
+    
+    # Add rest days (simplified)
+    data_df["rest_days"] = 1
+    
+    # Filter to feature columns
+    feature_data = data_df[feature_cols].fillna(method='ffill').fillna(0).astype(np.float32).values
+    
+    return data_df, feature_data
 
-# Now apply the same opponent columns to our train/test splits
-train_df["home_flag"] = train_df["MATCHUP"].apply(lambda x: 1 if "vs" in x else 0)
-test_df["home_flag"] = test_df["MATCHUP"].apply(lambda x: 1 if "vs" in x else 0)
+def calculate_time_weights(n_games, decay_rate):
+    """Calculate exponential time weights"""
+    game_indices = np.arange(n_games)
+    time_weights = np.exp(-decay_rate * (n_games - 1 - game_indices))
+    time_weights = time_weights * n_games / time_weights.sum()
+    return time_weights
 
-# Add opponent dummy columns to train and test sets
-for col in opp_dummies.columns:
-    train_df[col] = 0
-    test_df[col] = 0
+def fit_model_fast(X_train_std, y_train, time_weights, target, expected_mean, n_basic, n_team_stats, n_rolling):
+    """Fast model fitting for online updates"""
+    
+    sampling_params = {
+        'draws': 150 if FAST_SAMPLING else 250,
+        'tune': 200 if FAST_SAMPLING else 300,
+        'chains': 2,
+        'cores': 1,
+        'target_accept': 0.80 if FAST_SAMPLING else 0.85,
+        'max_treedepth': 6 if FAST_SAMPLING else 8
+    }
+    
+    with pm.Model() as model:
+        # Informative intercept
+        intercept = pm.Normal("intercept", mu=np.log(expected_mean), sigma=0.3)
+        
+        # Feature coefficients
+        beta_basic = pm.Normal("beta_basic", mu=0, sigma=0.3, shape=n_basic)
+        beta_team = pm.Normal("beta_team", mu=0, sigma=0.5, shape=n_team_stats)
+        beta_rolling = pm.Normal("beta_rolling", mu=0, sigma=0.8, shape=n_rolling)
+        
+        # Combine all betas
+        beta = pm.math.concatenate([beta_basic, beta_team, beta_rolling])
+        
+        # Dispersion parameter
+        phi = pm.HalfNormal("phi", sigma=0.8)
 
-# Activate appropriate opponent features
-for idx, row in train_df.iterrows():
-    opponent = row["OPP_TEAM"]
-    if f"opp_{opponent}" in opp_dummies.columns:
-        train_df.loc[idx, f"opp_{opponent}"] = 1
+        # Linear predictor
+        linear_pred = intercept + pm.math.dot(X_train_std, beta)
+        mu = pm.math.exp(pm.math.clip(linear_pred, -10, 10))
+        
+        # Time-weighted likelihood
+        likelihood_vals = pm.logp(pm.NegativeBinomial.dist(mu=mu, alpha=phi), y_train)
+        weighted_likelihood = pm.math.sum(time_weights * likelihood_vals)
+        pm.Potential("time_weighted_likelihood", weighted_likelihood)
 
-for idx, row in test_df.iterrows():
-    opponent = row["OPP_TEAM"]
-    if f"opp_{opponent}" in opp_dummies.columns:
-        test_df.loc[idx, f"opp_{opponent}"] = 1
-
-# Merge team stats for the player's team
-team_cols = ["OFF_RATING", "DEF_RATING", "NET_RATING", "PACE", "AST_RATIO", "REB_PCT"]
-t_own = t_df.rename(columns={col: f"TEAM_{col}" for col in team_cols})
-train_df = train_df.merge(t_own, on="TEAM_ABBREVIATION", how="left")
-test_df = test_df.merge(t_own, on="TEAM_ABBREVIATION", how="left")
-
-# Merge team stats for the opponent's team
-t_opp = t_df.rename(columns={"TEAM_ABBREVIATION": "OPP_TEAM", **{col: f"OPP_{col}" for col in team_cols}})
-train_df = train_df.merge(t_opp, on="OPP_TEAM", how="left")
-test_df = test_df.merge(t_opp, on="OPP_TEAM", how="left")
-
-# Create player_idx column (will be 0 for LeBron since he's the only player)
-player2idx = {LEBRON_ID: 0}
-train_df["player_idx"] = 0
-test_df["player_idx"] = 0
+        # Sample
+        trace = pm.sample(
+            **sampling_params,
+            return_inferencedata=True,
+            progressbar=False,
+            init='adapt_diag'
+        )
+    
+    return model, trace
 
 # --------------------------------------------------------------
-# 2-B  DESIGN-MATRIX FEATURE LIST
+# 3  FEATURE ENGINEERING SETUP
 # --------------------------------------------------------------
+
+# Merge opponent team stats setup
+opponent_stats = team_stats[["TEAM_ABBREVIATION", "OFF_RATING", "DEF_RATING", "NET_RATING", 
+                           "PACE", "AST_RATIO", "REB_PCT"]].copy()
+opponent_stats.columns = ["OPP_TEAM", "OPP_OFF_RATING", "OPP_DEF_RATING", "OPP_NET_RATING", 
+                         "OPP_PACE", "OPP_AST_RATIO", "OPP_REB_PCT"]
+
+team_stat_cols = ["OPP_OFF_RATING", "OPP_DEF_RATING", "OPP_NET_RATING", "OPP_PACE", 
+                  "OPP_AST_RATIO", "OPP_REB_PCT"]
+
+# Pre-calculate ALL rolling averages for the full season
+for target in TARGETS:
+    for roll in ROLLS:
+        col_name = f"{target.lower()}_roll_{roll}"
+        season_2024_25_df[col_name] = season_2024_25_df[target].rolling(window=roll, min_periods=1).mean()
+
+# Define feature columns
 feature_cols = (
-    [f"{t.lower()}_roll_{w}" for t in TARGETS for w in ROLLS] +  # Rolling features
-    ["rest_days", "is_b2b", "home_flag"] +                      # Additional features
-    list(opp_dummies.columns) +                                 # One-hot opponent features
-    [f"TEAM_{c}" for c in team_cols] +                         # Team stats
-    [f"OPP_{c}"  for c in team_cols]                           # Opponent stats
+    ["home_flag", "rest_days"] +
+    [col for col in team_stat_cols] +
+    [f"{target.lower()}_roll_{roll}" for target in TARGETS for roll in ROLLS]
 )
 
-# Filter feature_cols to only include columns that exist in both train and test sets
-available_cols = set(train_df.columns) & set(test_df.columns)
-feature_cols = [col for col in feature_cols if col in available_cols]
-
-print(f"Using {len(feature_cols)} features for modeling")
-
-# ---- Build numeric DataFrames, coerce non-numerics, fill NaNs ----
-X_train_df = train_df[feature_cols].copy()
-X_test_df  = test_df[feature_cols].copy()
-
-X_train_df = X_train_df.apply(pd.to_numeric, errors="coerce")
-X_test_df  = X_test_df.apply(pd.to_numeric, errors="coerce")
-
-meds = X_train_df.median()
-X_train_df = X_train_df.fillna(meds)
-X_test_df  = X_test_df.fillna(meds)
-
-X_train = X_train_df.to_numpy(dtype="float64")
-X_test  = X_test_df.to_numpy(dtype="float64")
-
-# ---- Standardize ----
-if X_train.ndim == 1:
-    X_train = X_train.reshape(-1, 1)
-
-means = X_train.mean(axis=0)
-stds  = X_train.std(axis=0) + 1e-6
-X_train_std = (X_train - means) / stds
-X_test_std  = (X_test - means) / stds
+print(f"Using {len(feature_cols)} features for online learning:")
+print(f"  Basic: home_flag, rest_days")
+print(f"  Team stats: {len(team_stat_cols)} opponent features")  
+print(f"  Rolling: {len(TARGETS) * len(ROLLS)} rolling averages")
 
 # --------------------------------------------------------------
-# 3  DYNAMICALLY ACTIVATE opp_* FEATURES
+# 4  ONLINE LEARNING MAIN LOOP
 # --------------------------------------------------------------
-def activate_opp_features(df, opponent):
-    """Activate only the relevant opp_* feature for the given opponent."""
-    opp_cols = [col for col in df.columns if col.startswith("opp_")]
-    df[opp_cols] = 0  # Deactivate all opp_* features
-    if f"opp_{opponent}" in df.columns:
-        df[f"opp_{opponent}"] = 1  # Activate the relevant opponent feature
-    return df
 
-# --------------------------------------------------------------
-# 4  BAYESIAN NEGATIVE BINOMIAL MODEL
-# --------------------------------------------------------------
 if __name__ == '__main__':
-    pred_frames = []
-
+    all_predictions = []
+    
     for target in TARGETS:
-        print(f"--- Fitting {target} ---")
-        y_train = train_df[target].values.astype("int64")
-
-        with pm.Model() as model:
-            x_data = pm.Data("x_data", X_train_std)
-            player_idx = pm.Data("player_idx", train_df["player_idx"].values)
-
-            mu_a = pm.Normal("mu_a", mu=0, sigma=2)
-            sigma_a = pm.HalfNormal("sigma_a", sigma=2)
-            a = pm.Normal("a", mu=mu_a, sigma=sigma_a, shape=len(player2idx))
-
-            beta = pm.Normal("beta", mu=0, sigma=1, shape=X_train_std.shape[1])
-            phi = pm.HalfNormal("phi", sigma=2)
-
-            # Debugging: Print shapes of key variables
-            print(f"Shape of player_idx: {train_df['player_idx'].values.shape}")
-            print(f"Shape of x_data: {X_train_std.shape}")
-            print(f"Shape of y_train: {y_train.shape}")
-
-            # Ensure theta matches y_train shape
-            theta = pm.math.exp(a[player_idx] + pm.math.dot(x_data, beta))
-
-            # Define the Negative Binomial distribution
-            pm.NegativeBinomial("y", mu=theta, alpha=phi, observed=y_train)
-
-            # Increase target_accept to reduce divergences
-            trace = pm.sample(500, tune=500, target_accept=0.99, chains=4, cores=1)
-
-            # Posterior predictive for TEST SET
-            test_df_copy = test_df.copy()
+        print(f"\n{'='*60}")
+        print(f"ONLINE LEARNING FOR {target}")
+        print(f"{'='*60}")
+        
+        target_predictions = []
+        
+        # Target-specific parameters
+        target_means = {"PTS": 25, "REB": 7, "AST": 7}
+        expected_mean = target_means.get(target, 15)
+        
+        # Feature breakdown
+        n_basic = 2
+        n_team_stats = len(team_stat_cols)
+        n_rolling = len(TARGETS) * len(ROLLS)
+        
+        # Initial training data
+        current_train_end = initial_train_size
+        
+        # Iterate through each test game
+        for test_game_idx in range(initial_train_size, total_games):
             
-            # Prepare test features
-            X_test_final = test_df_copy[feature_cols].apply(pd.to_numeric, errors="coerce").fillna(meds)
-            X_test_std_final = (X_test_final.to_numpy(dtype="float64") - means) / stds
+            print(f"\nPredicting game {test_game_idx + 1}/{total_games} (Test game {test_game_idx - initial_train_size + 1})")
             
-            # Update the model with test data
-            pm.set_data({"x_data": X_test_std_final, "player_idx": test_df_copy["player_idx"].values}, model=model)
-
-            # Debug shapes during posterior predictive sampling
-            print(f"Shape of X_test_std_final: {X_test_std_final.shape}")
-            print(f"Shape of player_idx (test): {test_df_copy['player_idx'].values.shape}")
-
-            # Sample posterior predictive
-            ppc = pm.sample_posterior_predictive(trace, var_names=["y"], random_seed=42)
-            draws = ppc.posterior_predictive["y"]
-
-            pred_df = test_df_copy[["GAME_ID", "PLAYER_ID", "GAME_DATE", target]].copy()
-            pred_df[f"{target}_mean"] = draws.mean(axis=(0, 1))  # Average over chains and draws
-            pred_df[f"{target}_lo"] = np.percentile(draws, 5, axis=(0, 1))
-            pred_df[f"{target}_hi"] = np.percentile(draws, 95, axis=(0, 1))
-            pred_frames.append(pred_df)
+            # Current training data (all games up to test game)
+            current_train_df = season_2024_25_df.iloc[:current_train_end].copy()
+            
+            # Current test game (single game)
+            current_test_df = season_2024_25_df.iloc[[test_game_idx]].copy()
+            
+            # Prepare features
+            current_train_df, X_train = prepare_features(
+                current_train_df, opponent_stats, team_stat_cols, 
+                season_2024_25_df, feature_cols
+            )
+            
+            current_test_df, X_test = prepare_features(
+                current_test_df, opponent_stats, team_stat_cols,
+                season_2024_25_df, feature_cols
+            )
+            
+            # Standardize features
+            means = np.mean(X_train, axis=0)
+            stds = np.std(X_train, axis=0) + 1e-8
+            X_train_std = (X_train - means) / stds
+            X_test_std = (X_test - means) / stds
+            
+            # Time weights for current training data
+            time_weights = calculate_time_weights(len(current_train_df), DECAY_RATE)
+            
+            # Training target
+            y_train = current_train_df[target].values.astype(np.int32)
+            
+            # Decide whether to retrain model
+            should_retrain = (
+                test_game_idx == initial_train_size or  # First test game
+                (test_game_idx - initial_train_size) % RETRAIN_FREQUENCY == 0  # Every N games
+            )
+            
+            if should_retrain:
+                print(f"  🔄 Retraining model on {len(current_train_df)} games...")
+                
+                # Fit model
+                model, trace = fit_model_fast(
+                    X_train_std, y_train, time_weights, target, expected_mean,
+                    n_basic, n_team_stats, n_rolling
+                )
+                
+                # Store model for next predictions (if not retraining every game)
+                current_model = model
+                current_trace = trace
+                current_means = means
+                current_stds = stds
+                
+            else:
+                print(f"  ⚡ Using cached model (last retrained {(test_game_idx - initial_train_size) % RETRAIN_FREQUENCY} games ago)")
+                # Use previously fitted model but update standardization
+                model = current_model
+                trace = current_trace
+                # Update test standardization with new means/stds
+                X_test_std = (X_test - current_means) / current_stds
+            
+            # Make prediction for this single game
+            with model:
+                # Use the updated test features
+                intercept_samples = trace.posterior['intercept'].values.flatten()
+                beta_basic_samples = trace.posterior['beta_basic'].values.reshape(-1, n_basic)
+                beta_team_samples = trace.posterior['beta_team'].values.reshape(-1, n_team_stats)
+                beta_rolling_samples = trace.posterior['beta_rolling'].values.reshape(-1, n_rolling)
+                phi_samples = trace.posterior['phi'].values.flatten()
+                
+                # Combine betas
+                beta_samples = np.concatenate([beta_basic_samples, beta_team_samples, beta_rolling_samples], axis=1)
+                
+                # Predict
+                n_samples = len(intercept_samples)
+                predictions = []
+                
+                for i in range(n_samples):
+                    linear_pred = intercept_samples[i] + np.dot(X_test_std[0], beta_samples[i])
+                    mu_pred = np.exp(np.clip(linear_pred, -10, 10))
+                    
+                    # Sample from negative binomial
+                    pred_sample = np.random.negative_binomial(phi_samples[i], phi_samples[i] / (mu_pred + phi_samples[i]))
+                    predictions.append(pred_sample)
+                
+                predictions = np.array(predictions)
+            
+            # Store prediction
+            actual_value = current_test_df[target].iloc[0]
+            game_date = current_test_df["GAME_DATE"].iloc[0]
+            
+            pred_mean = np.mean(predictions)
+            pred_lo = np.percentile(predictions, 10)
+            pred_hi = np.percentile(predictions, 90)
+            
+            target_predictions.append({
+                'GAME_DATE': game_date,
+                'game_num': test_game_idx + 1,
+                f'{target}': actual_value,
+                f'{target}_mean': pred_mean,
+                f'{target}_lo': pred_lo,
+                f'{target}_hi': pred_hi,
+                'training_games': len(current_train_df)
+            })
+            
+            # Print prediction vs actual
+            error = abs(actual_value - pred_mean)
+            print(f"  📊 Predicted: {pred_mean:.1f} [{pred_lo:.0f}-{pred_hi:.0f}] | Actual: {actual_value} | Error: {error:.1f}")
+            
+            # Update training set to include this game for next iteration
+            current_train_end = test_game_idx + 1
+        
+        # Convert to DataFrame
+        target_df = pd.DataFrame(target_predictions)
+        all_predictions.append(target_df)
+        
+        # Performance summary
+        actual = target_df[target].values
+        predicted = target_df[f'{target}_mean'].values
+        mae = np.mean(np.abs(actual - predicted))
+        rmse = np.sqrt(np.mean((actual - predicted)**2))
+        
+        print(f"\n{target} ONLINE PERFORMANCE:")
+        print(f"  MAE: {mae:.2f}")
+        print(f"  RMSE: {rmse:.2f}")
+        print(f"  Coverage: {np.mean((actual >= target_df[f'{target}_lo']) & (actual <= target_df[f'{target}_hi']))*100:.1f}%")
 
     # --------------------------------------------------------------
-    # 5  MERGE & SAVE
+    # 5  COMBINE RESULTS AND SAVE
     # --------------------------------------------------------------
-    preds = pred_frames[0]
-    for pf in pred_frames[1:]:
-        preds = preds.merge(pf, on=["GAME_ID", "PLAYER_ID", "GAME_DATE"])
-
-    preds.to_csv(OUT, index=False)
-    print(f"\nPosterior predictive summaries saved to {OUT}")
-
-    # --------------------------------------------------------------
-    # 6  PLOT RESULTS
-    # --------------------------------------------------------------
-    for target in TARGETS:
-        plt.figure(figsize=(10, 6))
-        plt.plot(preds["GAME_DATE"], preds[target], label="Actual", marker="o")
-        plt.plot(preds["GAME_DATE"], preds[f"{target}_mean"], label="Predicted", marker="x")
-        plt.fill_between(
-            preds["GAME_DATE"],
-            preds[f"{target}_lo"],
-            preds[f"{target}_hi"],
-            color="gray",
-            alpha=0.3,
-            label="95% CI"
+    
+    # Merge all predictions
+    final_preds = all_predictions[0]
+    for pred_df in all_predictions[1:]:
+        final_preds = final_preds.merge(
+            pred_df, on=['GAME_DATE', 'game_num', 'training_games'], how='outer'
         )
-        plt.title(f"LeBron James - {target} Predictions")
-        plt.xlabel("Game Date")
-        plt.ylabel(target)
-        plt.legend()
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
+    
+    final_preds.to_csv(OUT, index=False)
+    print(f"\n📁 Online predictions saved to {OUT}")
+
+    # --------------------------------------------------------------
+    # 6  VISUALIZATION
+    # --------------------------------------------------------------
+    
+    fig, axes = plt.subplots(len(TARGETS), 1, figsize=(15, 4*len(TARGETS)))
+    if len(TARGETS) == 1:
+        axes = [axes]
+
+    for i, target in enumerate(TARGETS):
+        ax = axes[i]
+        
+        # Plot actual vs predicted
+        ax.plot(final_preds["game_num"], final_preds[target], 'o-', 
+               label="Actual", alpha=0.9, linewidth=2.5, markersize=7, color='darkblue')
+        ax.plot(final_preds["game_num"], final_preds[f"{target}_mean"], 's-', 
+               label="Predicted", alpha=0.9, linewidth=2.5, markersize=7, color='darkred')
+        ax.fill_between(
+            final_preds["game_num"],
+            final_preds[f"{target}_lo"],
+            final_preds[f"{target}_hi"],
+            alpha=0.25,
+            label="80% Prediction Interval",
+            color='gray'
+        )
+        
+        ax.set_title(f"LeBron {target} - Online Learning (Retrain every {RETRAIN_FREQUENCY} games)", 
+                    fontsize=16, pad=20)
+        ax.set_xlabel("Game Number", fontsize=14)
+        ax.set_ylabel(target, fontsize=14)
+        ax.legend(fontsize=12)
+        ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
+    # --------------------------------------------------------------
+    # 7  FINAL PERFORMANCE SUMMARY
+    # --------------------------------------------------------------
+    
+    print("\n" + "="*80)
+    print("ONLINE LEARNING PERFORMANCE SUMMARY")
+    print("="*80)
+    
+    for target in TARGETS:
+        if f"{target}_mean" in final_preds.columns:
+            actual = final_preds[target].values
+            predicted = final_preds[f"{target}_mean"].values
+            
+            mae = np.mean(np.abs(actual - predicted))
+            rmse = np.sqrt(np.mean((actual - predicted)**2))
+            mape = np.mean(np.abs((actual - predicted) / actual)) * 100
+            
+            # Coverage
+            lo = final_preds[f"{target}_lo"].values
+            hi = final_preds[f"{target}_hi"].values
+            coverage = np.mean((actual >= lo) & (actual <= hi)) * 100
+            
+            # Correlation
+            correlation = np.corrcoef(actual, predicted)[0, 1]
+            
+            print(f"{target:>3} | MAE: {mae:5.2f} | RMSE: {rmse:5.2f} | MAPE: {mape:5.1f}% | Coverage: {coverage:5.1f}% | Corr: {correlation:.3f}")
+
+    print("="*80)
+    print("ONLINE LEARNING ADVANTAGES:")
+    print(f"• Model updates every {RETRAIN_FREQUENCY} games with new information")
+    print("• Time-weighted learning emphasizes recent performance")
+    print("• Captures evolving player form and opponent adjustments")
+    print("• Rolling features automatically update with each game")
+    print("• More realistic evaluation of real-world prediction accuracy")
+    print("="*80)

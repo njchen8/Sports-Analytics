@@ -20,7 +20,7 @@ DROP_COLS = [
     "DD2_RANK","TD3_RANK","WNBA_FANTASY_PTS_RANK","AVAILABLE_FLAG"
 ]
 
-ROLLS = [5, 10]  # Rolling window sizes
+ROLLS = [1, 3, 5, 10]  # Rolling window sizes
 TARGETS = ["PTS", "REB", "AST"]  # Stats to calculate rolling features for
 
 # --- 2. HELPERS ----------------------------------------------------------
