@@ -15,7 +15,7 @@ CSV_PLAYERS = Path("nba_players_game_logs_2018_25_clean.csv")
 CSV_TEAMS   = Path("team_stats.csv")
 OUT         = Path("bayes_props_preds.csv")
 
-ROLLS   = [5, 10]
+ROLLS   = [1, 3, 5, 10]
 TARGETS = ["PTS", "REB", "AST"]
 
 # --------------------------------------------------------------
