@@ -31,54 +31,55 @@ OPPONENT_ADJUSTMENT = True          # Adjust for opponent strength
 CONTEXTUAL_FEATURES = True          # Include rest, venue, etc.
 
 # Time decay parameters (research-optimized)
-DECAY_RATE = 0.05                  # Exponential decay for historical weights
-MOMENTUM_WEIGHT = 0.1              # Reduced weight for trend/momentum features
-OPPONENT_WEIGHT = 0.05             # Added: Small weight for opponent adjustments
-VOLATILITY_PENALTY = 0.1           # Penalty for high volatility periods
+DECAY_RATE = 0.025                 # Slightly slower decay for better stability
+MOMENTUM_WEIGHT = 0.08             # Reduced momentum weight to prevent overfitting
+OPPONENT_WEIGHT = 0.03             # Reduced opponent weight for more conservative adjustments
+VOLATILITY_PENALTY = 0.08          # Reduced penalty
+TEAM_MATCHUP_WEIGHT = 0.06         # NEW: Team matchup analytics weight
 
 # Online learning parameters
 MIN_GAMES_FOR_PREDICTION = 15      # Minimum games before making predictions
 VALIDATION_WINDOW = 10             # Rolling validation window
 
-print("🏀 RESEARCH-ENHANCED NBA PREDICTION MODEL")
+print("RESEARCH-ENHANCED NBA PREDICTION MODEL")
 print("="*50)
-print("📊 Key Research Features:")
-print("   ✅ Multi-period lagged indicators")
-print("   ✅ Adaptive exponential weighting")
-print("   ✅ Momentum and trend analysis")
-print("   ✅ Opponent strength adjustments")
-print("   ✅ Contextual game features")
-print("   ✅ Online learning with validation")
+print("Key Research Features:")
+print("   - Multi-period lagged indicators")
+print("   - Adaptive exponential weighting")
+print("   - Momentum and trend analysis")
+print("   - Opponent strength adjustments")
+print("   - Contextual game features")
+print("   - Online learning with validation")
 
 # --------------------------------------------------------------
 # 2  DATA LOADING AND PREPROCESSING
 # --------------------------------------------------------------
 
 def load_and_prepare_data():
-    """Load and prepare data for analysis"""
-    print(f"\n🔍 LOADING DATA")
+    """Load and prepare data for proper train/test split with no leakage"""
+    print(f"\nLOADING DATA")
     print("-"*20)
     
     # Load datasets
     df = pd.read_csv(CSV_PLAYERS, parse_dates=["GAME_DATE"])
     team_stats = pd.read_csv(CSV_TEAMS) if CSV_TEAMS.exists() else pd.DataFrame()
     
-    print(f"📊 Dataset loaded: {df.shape[0]:,} games")
-    print(f"📅 Date range: {df['GAME_DATE'].min()} to {df['GAME_DATE'].max()}")
-    print(f"🏀 Players: {df['PLAYER_ID'].nunique():,}")
-    print(f"🏟️  Seasons: {', '.join(sorted(df['SEASON_YEAR'].unique()))}")
+    print(f"Dataset loaded: {df.shape[0]:,} games")
+    print(f"Date range: {df['GAME_DATE'].min()} to {df['GAME_DATE'].max()}")
+    print(f"Players: {df['PLAYER_ID'].nunique():,}")
+    print(f"Seasons: {', '.join(sorted(df['SEASON_YEAR'].unique()))}")
     
     # Find LeBron James
     lebron_candidates = df[df["PLAYER_NAME"].str.contains("LeBron", case=False, na=False)]
     
     if lebron_candidates.empty:
-        print("❌ No LeBron James data found")
-        return None, None
+        print("No LeBron James data found")
+        return None, None, None
     
     lebron_id = lebron_candidates["PLAYER_ID"].iloc[0]
     lebron_name = lebron_candidates["PLAYER_NAME"].iloc[0]
     
-    print(f"\n🎯 TARGET PLAYER: {lebron_name}")
+    print(f"\nTARGET PLAYER: {lebron_name}")
     print(f"   Player ID: {lebron_id}")
     
     # Get all LeBron data, sorted chronologically
@@ -88,18 +89,32 @@ def load_and_prepare_data():
     print(f"   Total games: {len(player_data)}")
     print(f"   Seasons: {', '.join(sorted(player_data['SEASON_YEAR'].unique()))}")
     
-    # Focus on recent seasons for better prediction relevance
-    recent_seasons = ["2022-23", "2023-24", "2024-25"]
-    recent_data = player_data[player_data["SEASON_YEAR"].isin(recent_seasons)].copy()
+    # Identify the most recent complete season for testing
+    available_seasons = sorted(player_data['SEASON_YEAR'].unique())
+    print(f"   Available seasons: {available_seasons}")
     
-    if len(recent_data) < MIN_GAMES_FOR_PREDICTION:
-        print(f"⚠️  Insufficient recent data: {len(recent_data)} games")
-        print("   Using all available data...")
-        recent_data = player_data.copy()
+    # Use the most recent season as test set
+    test_season = available_seasons[-1]  # Most recent season
     
-    print(f"   Analysis data: {len(recent_data)} games")
+    # Split data: train on all seasons EXCEPT the test season
+    train_data = player_data[player_data["SEASON_YEAR"] != test_season].copy()
+    test_data = player_data[player_data["SEASON_YEAR"] == test_season].copy()
     
-    return recent_data, team_stats
+    print(f"\nTRAIN/TEST SPLIT:")
+    print(f"   Training seasons: {sorted(train_data['SEASON_YEAR'].unique())}")
+    print(f"   Training games: {len(train_data)}")
+    print(f"   Test season: {test_season}")
+    print(f"   Test games: {len(test_data)}")
+    
+    if len(train_data) < MIN_GAMES_FOR_PREDICTION:
+        print(f"Insufficient training data: {len(train_data)} games")
+        return None, None, None
+    
+    if len(test_data) < 5:
+        print(f"Insufficient test data: {len(test_data)} games")
+        return None, None, None
+    
+    return train_data, test_data, team_stats
 
 # --------------------------------------------------------------
 # 3  RESEARCH-BASED FEATURE ENGINEERING
@@ -110,15 +125,18 @@ def calculate_lagged_indicators(df, target, current_idx):
     Calculate comprehensive lagged indicators based on research.
     Multiple lag periods capture different aspects of performance patterns.
     """
-    if current_idx < max(LAG_WINDOWS):
+    if current_idx < max(LAG_WINDOWS) or current_idx >= len(df):
         return {}
     
     features = {}
     target_values = df[target].iloc[:current_idx].values
     
+    if len(target_values) == 0:
+        return {}
+    
     # Direct lag features (L1, L2, L3, L5, L7, L10)
     for lag in LAG_WINDOWS:
-        if current_idx >= lag:
+        if len(target_values) >= lag:
             features[f"{target}_L{lag}"] = target_values[-lag]
         else:
             features[f"{target}_L{lag}"] = np.mean(target_values) if len(target_values) > 0 else 0
@@ -218,63 +236,76 @@ def calculate_opponent_features(df, target, current_idx, team_stats):
     Players perform differently against different defensive strengths.
     Returns normalized adjustment factors, not raw values.
     """
-    if not OPPONENT_ADJUSTMENT or current_idx == 0:
+    if not OPPONENT_ADJUSTMENT or current_idx == 0 or current_idx >= len(df):
         return {}
     
     features = {}
-    current_game = df.iloc[current_idx]
-    current_opponent = extract_opponent_from_matchup(current_game.get("MATCHUP", ""))
     
-    # Calculate player's season average up to this point for normalization
-    season_avg = np.mean(df.iloc[:current_idx][target]) if current_idx > 0 else np.mean(df[target])
-    
-    # Historical performance against this specific opponent
-    opponent_history = []
-    for i in range(current_idx):
-        game = df.iloc[i]
-        opponent = extract_opponent_from_matchup(game.get("MATCHUP", ""))
-        if opponent == current_opponent:
-            opponent_history.append(game[target])
-    
-    if len(opponent_history) > 0:
-        opponent_avg = np.mean(opponent_history)
-        # Calculate relative adjustment (not raw value)
-        adjustment = (opponent_avg - season_avg) / season_avg if season_avg > 0 else 0
-        features[f"{target}_vs_opponent_adj"] = max(-0.3, min(0.3, adjustment))  # Cap at ±30%
-    else:
-        features[f"{target}_vs_opponent_adj"] = 0.0
-    
-    # Opponent defensive strength (if team stats available)
-    if not team_stats.empty and current_opponent in team_stats["TEAM_ABBREVIATION"].values:
-        opp_stats = team_stats[team_stats["TEAM_ABBREVIATION"] == current_opponent].iloc[0]
-        def_rating = opp_stats.get("DEF_RATING", 110)
+    try:
+        current_game = df.iloc[current_idx]
+        current_opponent = extract_opponent_from_matchup(current_game.get("MATCHUP", ""))
         
-        # Normalize defensive rating (lower is better defense)
-        # 105 = elite defense, 110 = average, 115 = poor defense
-        normalized_def = (def_rating - 110) / 10  # Smaller range: roughly -0.5 to 0.5
-        features[f"{target}_opp_def_strength"] = max(-0.2, min(0.2, normalized_def))
-        
-        # Find performance against similar defensive teams
-        similar_def_teams = team_stats[
-            abs(team_stats["DEF_RATING"] - def_rating) <= 2
-        ]["TEAM_ABBREVIATION"].tolist()
-        
-        similar_performance = []
-        for i in range(current_idx):
-            game = df.iloc[i]
-            game_opponent = extract_opponent_from_matchup(game.get("MATCHUP", ""))
-            if game_opponent in similar_def_teams:
-                similar_performance.append(game[target])
-        
-        if len(similar_performance) >= 3:
-            similar_avg = np.mean(similar_performance[-10:])  # Recent 10
-            similar_adj = (similar_avg - season_avg) / season_avg if season_avg > 0 else 0
-            features[f"{target}_vs_similar_def_adj"] = max(-0.2, min(0.2, similar_adj))
+        # Calculate player's season average up to this point for normalization
+        if current_idx > 0:
+            season_avg = np.mean(df.iloc[:current_idx][target])
         else:
-            features[f"{target}_vs_similar_def_adj"] = features.get(f"{target}_vs_opponent_adj", 0.0)
-    else:
-        features[f"{target}_opp_def_strength"] = 0.0
-        features[f"{target}_vs_similar_def_adj"] = 0.0
+            season_avg = np.mean(df[target]) if len(df) > 0 else 15.0
+        
+        # Historical performance against this specific opponent
+        opponent_history = []
+        for i in range(min(current_idx, len(df))):
+            game = df.iloc[i]
+            opponent = extract_opponent_from_matchup(game.get("MATCHUP", ""))
+            if opponent == current_opponent:
+                opponent_history.append(game[target])
+        
+        if len(opponent_history) > 0:
+            opponent_avg = np.mean(opponent_history)
+            # Calculate relative adjustment (not raw value)
+            adjustment = (opponent_avg - season_avg) / season_avg if season_avg > 0 else 0
+            features[f"{target}_vs_opponent_adj"] = max(-0.3, min(0.3, adjustment))  # Cap at ±30%
+        else:
+            features[f"{target}_vs_opponent_adj"] = 0.0
+        
+        # Opponent defensive strength (if team stats available)
+        if not team_stats.empty and current_opponent in team_stats["TEAM_ABBREVIATION"].values:
+            opp_stats = team_stats[team_stats["TEAM_ABBREVIATION"] == current_opponent].iloc[0]
+            def_rating = opp_stats.get("DEF_RATING", 110)
+            
+            # Normalize defensive rating (lower is better defense)
+            # 105 = elite defense, 110 = average, 115 = poor defense
+            normalized_def = (def_rating - 110) / 10  # Smaller range: roughly -0.5 to 0.5
+            features[f"{target}_opp_def_strength"] = max(-0.2, min(0.2, normalized_def))
+            
+            # Find performance against similar defensive teams
+            similar_def_teams = team_stats[
+                abs(team_stats["DEF_RATING"] - def_rating) <= 2
+            ]["TEAM_ABBREVIATION"].tolist()
+            
+            similar_performance = []
+            for i in range(min(current_idx, len(df))):
+                game = df.iloc[i]
+                game_opponent = extract_opponent_from_matchup(game.get("MATCHUP", ""))
+                if game_opponent in similar_def_teams:
+                    similar_performance.append(game[target])
+            
+            if len(similar_performance) >= 3:
+                similar_avg = np.mean(similar_performance[-10:])  # Recent 10
+                similar_adj = (similar_avg - season_avg) / season_avg if season_avg > 0 else 0
+                features[f"{target}_vs_similar_def_adj"] = max(-0.2, min(0.2, similar_adj))
+            else:
+                features[f"{target}_vs_similar_def_adj"] = features.get(f"{target}_vs_opponent_adj", 0.0)
+        else:
+            features[f"{target}_opp_def_strength"] = 0.0
+            features[f"{target}_vs_similar_def_adj"] = 0.0
+    
+    except (IndexError, KeyError) as e:
+        print(f"Warning: Error calculating opponent features: {e}")
+        features = {
+            f"{target}_vs_opponent_adj": 0.0,
+            f"{target}_opp_def_strength": 0.0,
+            f"{target}_vs_similar_def_adj": 0.0
+        }
     
     return features
 
@@ -283,7 +314,7 @@ def calculate_contextual_features(df, current_idx):
     Calculate contextual game features based on research.
     Rest, venue, and scheduling factors significantly impact performance.
     """
-    if not CONTEXTUAL_FEATURES or current_idx == 0:
+    if not CONTEXTUAL_FEATURES or current_idx == 0 or current_idx >= len(df):
         return {}
     
     features = {}
@@ -315,6 +346,50 @@ def calculate_contextual_features(df, current_idx):
     
     return features
 
+def calculate_advanced_team_features(df, target, current_idx, team_stats, current_game):
+    """
+    Advanced team and matchup analytics using all available team stats
+    """
+    if team_stats.empty or current_idx >= len(df):
+        return {}
+    
+    features = {}
+    
+    try:
+        player_team = current_game.get('TEAM_ABBREVIATION', '')
+        opponent_team = extract_opponent_from_matchup(current_game.get('MATCHUP', ''))
+        
+        # Player's team stats - normalized
+        if player_team in team_stats['TEAM_ABBREVIATION'].values:
+            team_row = team_stats[team_stats['TEAM_ABBREVIATION'] == player_team].iloc[0]
+            
+            features[f'team_off_rating_norm'] = (team_row['OFF_RATING'] - 113.5) / 5
+            features[f'team_pace_norm'] = (team_row['PACE'] - 100) / 5
+            features[f'team_ast_ratio'] = team_row['AST_RATIO'] / 20
+            features[f'team_reb_pct'] = team_row['REB_PCT']
+        
+        # Opponent team stats - target-specific adjustments
+        if opponent_team in team_stats['TEAM_ABBREVIATION'].values:
+            opp_row = team_stats[team_stats['TEAM_ABBREVIATION'] == opponent_team].iloc[0]
+            
+            # Target-specific defensive adjustments
+            if target == 'PTS':
+                features[f'matchup_factor'] = (opp_row['DEF_RATING'] - 113.5) / 10
+            elif target == 'REB':
+                features[f'matchup_factor'] = (0.5 - opp_row['REB_PCT']) * 2
+            elif target == 'AST':
+                features[f'matchup_factor'] = (opp_row['PACE'] - 100) / 15
+              # Game pace projection
+            if player_team in team_stats['TEAM_ABBREVIATION'].values:
+                pace_avg = (team_row['PACE'] + opp_row['PACE']) / 2
+                features[f'game_pace'] = (pace_avg - 100) / 10
+            
+    except Exception as e:
+        print(f"Warning: Error in team features: {e}")
+        features = {f'matchup_factor': 0.0, f'game_pace': 0.0}
+    
+    return features
+
 def prepare_comprehensive_features(df, target, current_idx, team_stats):
     """
     Combine all research-based features for comprehensive prediction.
@@ -322,18 +397,22 @@ def prepare_comprehensive_features(df, target, current_idx, team_stats):
     if current_idx < MIN_GAMES_FOR_PREDICTION:
         return {}
     
+    current_game = df.iloc[current_idx]
+    
     # Combine all feature types
     lag_features = calculate_lagged_indicators(df, target, current_idx)
     momentum_features = calculate_momentum_features(df, target, current_idx)
     opponent_features = calculate_opponent_features(df, target, current_idx, team_stats)
     contextual_features = calculate_contextual_features(df, current_idx)
+    team_features = calculate_advanced_team_features(df, target, current_idx, team_stats, current_game)
     
     # Merge all features
     all_features = {
         **lag_features,
         **momentum_features,
         **opponent_features,
-        **contextual_features
+        **contextual_features,
+        **team_features
     }
     
     return all_features
@@ -357,6 +436,10 @@ def calculate_weighted_prediction(features, target_values):
     momentum_keys = [k for k in features.keys() if 'momentum' in k or 'trend' in k or 'streak' in k]
     momentum_adj = sum(features.get(k, 0) for k in momentum_keys) * MOMENTUM_WEIGHT
     
+    # Team matchup adjustments (NEW)
+    team_keys = [k for k in features.keys() if 'team_' in k or 'matchup_factor' in k or 'game_pace' in k]
+    team_adj = sum(features.get(k, 0) for k in team_keys) * TEAM_MATCHUP_WEIGHT
+    
     # Opponent adjustment (multiplicative percentage adjustments)
     opponent_keys = [k for k in features.keys() if 'opponent_adj' in k or 'def_strength' in k or 'similar_def_adj' in k]
     opponent_factor = 1.0
@@ -374,10 +457,7 @@ def calculate_weighted_prediction(features, target_values):
     volatility_penalty = features.get(f"{list(features.keys())[0].split('_')[0]}_volatility_penalty", 0)
     
     # Combined prediction: base * opponent_factor + additive adjustments
-    final_pred = (base_pred * opponent_factor) + momentum_adj + context_adj + volatility_penalty
-    
-    # Ensure reasonable bounds (no negative stats)
-    return max(0, final_pred)
+    final_pred = (base_pred * opponent_factor) + momentum_adj + team_adj + context_adj + volatility_penalty
     
     # Ensure reasonable bounds (no negative stats)
     return max(0, final_pred)
@@ -475,28 +555,24 @@ def calculate_prediction_metrics(actual, predicted):
 # --------------------------------------------------------------
 
 def run_research_enhanced_analysis():
-    """Run complete research-enhanced analysis with online learning"""
+    """Run complete research-enhanced analysis with proper online learning"""
     
-    # Load data
-    player_data, team_stats = load_and_prepare_data()
-    if player_data is None:
+    # Load data with proper train/test split
+    train_data, test_data, team_stats = load_and_prepare_data()
+    if train_data is None:
         return
     
-    # Split data for online learning
-    total_games = len(player_data)
-    initial_training = max(MIN_GAMES_FOR_PREDICTION, int(total_games * 0.7))
-    
-    print(f"\n🎯 ONLINE LEARNING SETUP")
-    print(f"   Total games: {total_games}")
-    print(f"   Initial training: {initial_training}")
-    print(f"   Testing games: {total_games - initial_training}")
+    print(f"\nONLINE LEARNING SETUP")
+    print(f"   Training games: {len(train_data)}")
+    print(f"   Testing games: {len(test_data)}")
+    print(f"   Online learning: Model updates after each test game")
     
     results = {}
     
     # Analyze each target statistic
     for target in TARGETS:
         print(f"\n{'='*50}")
-        print(f"🏀 ANALYZING {target}")
+        print(f"ANALYZING {target}")
         print(f"{'='*50}")
         
         # Storage for predictions and actuals
@@ -507,55 +583,58 @@ def run_research_enhanced_analysis():
             "Linear_Trend": [], "Weighted_Avg": []
         }
         
-        # Online learning loop
-        for game_idx in range(initial_training, total_games):
-            current_game = player_data.iloc[game_idx]
+        # Start with training data only
+        current_data = train_data.copy()
+        
+        # Online learning loop: predict each test game and then add it to training
+        for test_idx in range(len(test_data)):
+            current_game = test_data.iloc[test_idx]
             game_date = current_game["GAME_DATE"].strftime("%Y-%m-%d")
             actual_value = current_game[target]
             
-            print(f"\n📅 Game {game_idx + 1}/{total_games} ({game_date})")
-            print(f"   Actual {target}: {actual_value}")
+            #print(f"\nGame {test_idx + 1}/{len(test_data)} ({game_date})")
+            #print(f"   Actual {target}: {actual_value}")
+            #print(f"   Training on {len(current_data)} historical games")
             
             # Store actual value
             actual_values.append(actual_value)
             
-            # Generate baseline predictions
-            baselines = create_enhanced_baselines(player_data, target, game_idx)
+            # Generate baseline predictions using current training data
+            baselines = create_enhanced_baselines(current_data, target, len(current_data))
             for model_name in baseline_predictions.keys():
                 baseline_predictions[model_name].append(baselines.get(model_name, actual_value))
             
-            # Generate research-enhanced prediction
-            features = prepare_comprehensive_features(player_data, target, game_idx, team_stats)
-            target_history = player_data[target].iloc[:game_idx].values
+            # Generate research-enhanced prediction using current training data
+            features = prepare_comprehensive_features(current_data, target, len(current_data), team_stats)
+            target_history = current_data[target].values
             
             research_pred = calculate_weighted_prediction(features, target_history)
             research_predictions.append(research_pred)
             
-            print(f"   Research Prediction: {research_pred:.1f}")
-            print(f"   Difference: {research_pred - actual_value:+.1f}")
+            #print(f"   Research Prediction: {research_pred:.1f}")
+            #print(f"   Difference: {research_pred - actual_value:+.1f}")
             
             # Show feature contributions
             if len(features) > 0:
-                #print("   Key Features:")
                 momentum_contrib = sum(v for k, v in features.items() if 'momentum' in k or 'trend' in k)
                 opponent_contrib = sum(v for k, v in features.items() if 'opponent' in k)
                 context_contrib = sum(v for k, v in features.items() if k in ['home_advantage', 'rest_impact'])
                 
-                if abs(momentum_contrib) > 0.01:
-                    print(f"     Momentum: {momentum_contrib:+.2f}")
-                if abs(opponent_contrib) > 0.01:
-                    print(f"     Opponent: {opponent_contrib:+.2f}")
-                if abs(context_contrib) > 0.01:
-                    print(f"     Context: {context_contrib:+.2f}")
+              
+            
+            # ONLINE LEARNING: Add this game to training data for next prediction
+            # This ensures no data leakage - we only use past data to predict future
+            current_data = pd.concat([current_data, current_game.to_frame().T], ignore_index=True)
+            current_data = current_data.sort_values("GAME_DATE").reset_index(drop=True)
         
         # Calculate final metrics
         if len(actual_values) > 0:
-            print(f"\n📊 FINAL RESULTS FOR {target}")
+            print(f"\nFINAL RESULTS FOR {target}")
             print("-" * 40)
             
             # Research model metrics
             research_metrics = calculate_prediction_metrics(actual_values, research_predictions)
-            print(f"🧠 Research-Enhanced Model:")
+            print(f"Research-Enhanced Model:")
             print(f"   R² = {research_metrics['R2']:.3f}")
             print(f"   MAE = {research_metrics['MAE']:.2f}")
             print(f"   Correlation = {research_metrics['Correlation']:.3f}")
@@ -563,7 +642,7 @@ def run_research_enhanced_analysis():
             print(f"   Bias = {research_metrics['Bias']:+.2f}")
             
             # Baseline comparisons
-            print(f"\n📈 Baseline Comparisons:")
+            print(f"\nBaseline Comparisons:")
             best_baseline_r2 = -np.inf
             best_baseline_name = ""
             
@@ -577,24 +656,25 @@ def run_research_enhanced_analysis():
                         best_baseline_name = model_name
             
             # Performance summary
-            print(f"\n🏆 PERFORMANCE SUMMARY:")
+            print(f"\nPERFORMANCE SUMMARY:")
             if research_metrics['R2'] > best_baseline_r2:
                 improvement = research_metrics['R2'] - best_baseline_r2
-                print(f"   ✅ Research model OUTPERFORMS best baseline ({best_baseline_name})")
-                print(f"   📈 R² improvement: +{improvement:.3f}")
+                print(f"   Research model OUTPERFORMS best baseline ({best_baseline_name})")
+                print(f"   R² improvement: +{improvement:.3f}")
                 
                 if improvement > 0.05:
-                    print(f"   🌟 SIGNIFICANT IMPROVEMENT!")
+                    print(f"   SIGNIFICANT IMPROVEMENT!")
                 
                 # Additional advantages
-                if research_metrics['MAE'] < min([calculate_prediction_metrics(actual_values, preds)['MAE'] 
-                                                for preds in baseline_predictions.values()]):
-                    print(f"   🎯 Also achieved LOWEST prediction error (MAE)")
+                baseline_maes = [calculate_prediction_metrics(actual_values, preds)['MAE'] 
+                               for preds in baseline_predictions.values() if len(preds) == len(actual_values)]
+                if baseline_maes and research_metrics['MAE'] < min(baseline_maes):
+                    print(f"   Also achieved LOWEST prediction error (MAE)")
                     
             else:
                 gap = best_baseline_r2 - research_metrics['R2']
-                print(f"   ⚠️  Best baseline ({best_baseline_name}) still leads by {gap:.3f}")
-                print(f"   🔧 Consider tuning research parameters")
+                print(f"   Best baseline ({best_baseline_name}) still leads by {gap:.3f}")
+                print(f"   Consider tuning research parameters")
             
             # Store results
             results[target] = {
@@ -604,8 +684,9 @@ def run_research_enhanced_analysis():
                 'research_metrics': research_metrics
             }
     
-    print(f"\n🎉 RESEARCH-ENHANCED ANALYSIS COMPLETE!")
-    print(f"💾 Results stored for {len(results)} targets")
+    print(f"\nRESEARCH-ENHANCED ANALYSIS COMPLETE!")
+    print(f"Results stored for {len(results)} targets")
+    print(f"Online learning: Model updated after each of {len(test_data)} test games")
     
     return results
 

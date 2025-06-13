@@ -1,0 +1,194 @@
+MULTI-PLAYER MODEL EVALUATION SUMMARY
+============================================================
+Total players evaluated: 40
+Average games per player: 420.5
+Average test games per player: 83.7
+
+TARGET: PTS
+------------------------------
+Valid evaluations: 40/40 (100.0%)
+
+OPTIMIZED MODEL PERFORMANCE:
+  Average R²: -0.2927 ± 0.3824
+  Median R²: -0.1750
+  R² Range: [-1.5086, -0.0023]
+  Average MAE: 5.785 ± 1.673
+  Average Correlation: 0.0232
+  Average Directional Accuracy: 49.5%
+
+BASELINE COMPARISON:
+  Average baseline R²: -0.0270 ± 0.0752
+  Average improvement: -0.2656 ± 0.4056
+  Median improvement: -0.1269
+  Improvement quartiles: Q1=-0.3323, Q3=0.0013
+  Players improved: 10/40 (25.0%)
+  Players worse: 30/40 (75.0%)
+
+EFFECT SIZE & PRACTICAL SIGNIFICANCE:
+  Cohen's d (effect size): -0.655
+  Effect size interpretation: MEDIUM effect
+  95% Confidence Interval: [-0.3953, -0.1359]
+
+PERFORMANCE BREAKDOWN:
+  Baseline Better: 30 (75.0%)
+  Minor Improvement: 8 (20.0%)
+  Significant Improvement: 2 (5.0%)
+
+CORRELATION ANALYSIS:
+  Games vs Improvement correlation: 0.239
+  -> Model performance shows WEAK correlation with game volume
+
+STATISTICAL SIGNIFICANCE:
+  t-statistic: -4.1427
+  p-value: 0.00017831
+  Degrees of freedom: 39
+  Result: *** HIGHLY SIGNIFICANT *** improvement (p < 0.001)
+
+TARGET: REB
+------------------------------
+Valid evaluations: 40/40 (100.0%)
+
+OPTIMIZED MODEL PERFORMANCE:
+  Average R²: -0.1767 ± 0.2648
+  Median R²: -0.0732
+  R² Range: [-1.2783, 0.0239]
+  Average MAE: 2.187 ± 0.875
+  Average Correlation: 0.0244
+  Average Directional Accuracy: 51.6%
+
+BASELINE COMPARISON:
+  Average baseline R²: -0.0729 ± 0.0839
+  Average improvement: -0.1039 ± 0.2814
+  Median improvement: -0.0214
+  Improvement quartiles: Q1=-0.1328, Q3=0.0601
+  Players improved: 17/40 (42.5%)
+  Players worse: 23/40 (57.5%)
+
+EFFECT SIZE & PRACTICAL SIGNIFICANCE:
+  Cohen's d (effect size): -0.369
+  Effect size interpretation: SMALL effect
+  95% Confidence Interval: [-0.1939, -0.0138]
+
+PERFORMANCE BREAKDOWN:
+  Baseline Better: 23 (57.5%)
+  Significant Improvement: 6 (15.0%)
+  Major Improvement: 6 (15.0%)
+  Minor Improvement: 5 (12.5%)
+
+CORRELATION ANALYSIS:
+  Games vs Improvement correlation: 0.342
+  -> Model performance MODERATELY correlates with game volume
+
+STATISTICAL SIGNIFICANCE:
+  t-statistic: -2.3338
+  p-value: 0.02485143
+  Degrees of freedom: 39
+  Result: * SIGNIFICANT * improvement (p < 0.05)
+
+TARGET: AST
+------------------------------
+Valid evaluations: 40/40 (100.0%)
+
+OPTIMIZED MODEL PERFORMANCE:
+  Average R²: -0.3942 ± 0.4562
+  Median R²: -0.2276
+  R² Range: [-2.0802, 0.0107]
+  Average MAE: 1.740 ± 0.788
+  Average Correlation: -0.0071
+  Average Directional Accuracy: 52.8%
+
+BASELINE COMPARISON:
+  Average baseline R²: -0.0782 ± 0.1031
+  Average improvement: -0.3159 ± 0.4532
+  Median improvement: -0.1304
+  Improvement quartiles: Q1=-0.5714, Q3=-0.0214
+  Players improved: 8/40 (20.0%)
+  Players worse: 32/40 (80.0%)
+
+EFFECT SIZE & PRACTICAL SIGNIFICANCE:
+  Cohen's d (effect size): -0.697
+  Effect size interpretation: MEDIUM effect
+  95% Confidence Interval: [-0.4609, -0.1710]
+
+PERFORMANCE BREAKDOWN:
+  Baseline Better: 32 (80.0%)
+  Minor Improvement: 4 (10.0%)
+  Major Improvement: 3 (7.5%)
+  Significant Improvement: 1 (2.5%)
+
+CORRELATION ANALYSIS:
+  Games vs Improvement correlation: 0.284
+  -> Model performance shows WEAK correlation with game volume
+
+STATISTICAL SIGNIFICANCE:
+  t-statistic: -4.4094
+  p-value: 0.00007904
+  Degrees of freedom: 39
+  Result: *** HIGHLY SIGNIFICANT *** improvement (p < 0.001)
+
+OVERALL MODEL EFFECTIVENESS
+----------------------------------------
+AGGREGATE PERFORMANCE METRICS:
+  Average R² across all targets: -0.2879
+  Average R² improvement: -0.2285
+  Average improvement success rate: 29.2%
+  Average correlation: 0.0135
+  Average directional accuracy: 51.3%
+
+STATISTICAL SIGNIFICANCE SUMMARY:
+  Significant targets (p < 0.05): 3/3
+  Highly significant targets (p < 0.01): 2/3
+  Large effect size targets (|d| >= 0.5): 2/3
+
+🔴 RECOMMENDATION: WEAK MODEL - DO NOT DEPLOY
+   ❌ Insufficient improvement over baselines
+   ❌ Requires significant redesign before production use
+
+DETAILED STATISTICS BY TARGET:
+----------------------------------------
+PTS:
+  R² = -0.2927 ± 0.3824
+  MAE = 5.785
+  Improvement = -0.2656 ± 0.4056
+  Success Rate = 25.0%
+  Correlation = 0.0232
+  Directional Accuracy = 49.5%
+  Effect Size (Cohen's d) = -0.655
+  95% CI = [-0.3953, -0.1359]
+  p-value = 0.000178
+
+REB:
+  R² = -0.1767 ± 0.2648
+  MAE = 2.187
+  Improvement = -0.1039 ± 0.2814
+  Success Rate = 42.5%
+  Correlation = 0.0244
+  Directional Accuracy = 51.6%
+  Effect Size (Cohen's d) = -0.369
+  95% CI = [-0.1939, -0.0138]
+  p-value = 0.024851
+
+AST:
+  R² = -0.3942 ± 0.4562
+  MAE = 1.740
+  Improvement = -0.3159 ± 0.4532
+  Success Rate = 20.0%
+  Correlation = -0.0071
+  Directional Accuracy = 52.8%
+  Effect Size (Cohen's d) = -0.697
+  95% CI = [-0.4609, -0.1710]
+  p-value = 0.000079
+
+MODEL DIAGNOSTICS & INSIGHTS:
+----------------------------------------
+Best performing target: REB
+  -> Improvement: -0.1039
+  -> Success rate: 42.5%
+Worst performing target: AST
+  -> Improvement: -0.3159
+  -> Success rate: 20.0%
+
+Cross-target consistency (std of improvements): 0.0905
+  -> Model shows VARIABLE performance across targets
+
+FINAL DEPLOYMENT RECOMMENDATION: DO_NOT_DEPLOY
