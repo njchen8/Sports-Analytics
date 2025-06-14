@@ -152,20 +152,23 @@ def evaluate_single_player(df, team_stats, player_id, player_name):
             
             # Start with training data
             current_data = train_data.copy()
-            
-            # Online learning loop
+              # Online learning loop
             for test_idx in range(len(test_data)):
                 current_game = test_data.iloc[test_idx]
                 actual_value = current_game[target]
                 actual_values.append(actual_value)
+                
+                # Get dynamic team stats for this time point (NO DATA LEAKAGE)
+                current_game_date = current_game['GAME_DATE']
+                dynamic_team_stats = get_dynamic_team_stats(current_game_date)
                 
                 # Generate baseline predictions
                 baselines = create_enhanced_baselines(current_data, target, len(current_data))
                 for model_name in baseline_predictions.keys():
                     baseline_predictions[model_name].append(baselines.get(model_name, actual_value))
                 
-                # Generate optimized prediction
-                features = prepare_comprehensive_features(current_data, target, len(current_data), team_stats)
+                # Generate optimized prediction using DYNAMIC team stats
+                features = prepare_comprehensive_features(current_data, target, len(current_data), dynamic_team_stats)
                 target_history = current_data[target].values
                 
                 if ENSEMBLE_METHODS and len(features) > 0:
@@ -535,28 +538,26 @@ def analyze_and_report_results(results_df):
     return overall_stats, deployment_recommendation
 
 # --------------------------------------------------------------
-# EXECUTION
+# DYNAMIC TEAM STATS (NO DATA LEAKAGE)
 # --------------------------------------------------------------
 
-if __name__ == "__main__":
+def get_season_from_date(game_date):
+    """Determine NBA season from game date"""
     try:
-        print("Starting multi-player evaluation...")
+        if isinstance(game_date, str):
+            game_date = pd.to_datetime(game_date)
         
-        # Run evaluation
-        results_df = run_multi_player_evaluation()
-        if len(results_df) > 0:
-            # Analyze and report
-            overall_stats, deployment_rec = analyze_and_report_results(results_df)
-            
-            print(f"\nEVALUATION COMPLETE!")
-            print(f"Evaluated {len(results_df)} players successfully")
-            print(f"Results saved to: {RESULTS_FILE}")
-            print(f"Summary saved to: {SUMMARY_FILE}")
-            print(f"Final recommendation: {deployment_rec}")
-        else:
-            print("No players could be evaluated successfully.")
-            
+        year = game_date.year
+        month = game_date.month
+        
+        # NBA season runs from October to June
+        if month >= 10:  # October, November, December
+            season_start_year = year
+        else:  # January through September
+            season_start_year = year - 1
+        
+        return f"{season_start_year}-{str(season_start_year + 1)[-2:]}"
+        
     except Exception as e:
-        print(f"Error during evaluation: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error determining season from date {game_date}: {e}")
+        return "2023-24"  # Default fallback
