@@ -20,7 +20,7 @@ import time
 warnings.filterwarnings('ignore')
 
 # Import our RNN + TFT model functions
-from rnn.rnn_tft_predictor import (
+from rnn_tft_predictor import (
     calculate_lstm_features,
     calculate_gru_features,
     calculate_bilstm_features,
@@ -56,7 +56,7 @@ NORMAL_SCORE_TRANSFORM = True          # Transform to normal scores
 # Test parameters
 MIN_GAMES_FOR_PLAYER = 50      # Reduced to get more players
 MIN_GAMES_FOR_PREDICTION = 25  # Minimum games before making predictions
-MAX_PLAYERS_TO_TEST = 30       # Reduced for faster testing
+MAX_PLAYERS_TO_TEST = 80       # Reduced for faster testing
 ENSEMBLE_METHODS = True        # Use ensemble methods
 ENSEMBLE_WEIGHTS = [0.35, 0.25, 0.25, 0.15]  # TFT, LSTM, Attention, Baseline
 
@@ -868,7 +868,7 @@ def test_single_player_comprehensive(train_data, test_data, team_stats, target, 
                 all_baselines = calculate_multiple_baselines(target_history, target)
                 baseline_errors = {}
                 for baseline_name, baseline_pred in all_baselines.items():
-                    if not np.isnan(baseline_pred):
+                    if not np.isnan(baseline_pred) and not np.isinf(baseline_pred):
                         baseline_errors[baseline_name] = abs(baseline_pred - actual)
                 
                 # Find the most accurate prediction (including RNN+TFT)
@@ -1129,7 +1129,7 @@ def print_comprehensive_baseline_analysis(all_results):
     print(f"\n🤖 RNN + TFT OVERALL PERFORMANCE:")
     print("-" * 40)
     
-    total_improvements = [r['improvement_pct'] for r in all_results if 'improvement_pct' in r]
+    total_improvements = [r['improvement_pct'] for r in all_results if 'improvement_pct' in r and not np.isnan(r['improvement_pct'])]
     if total_improvements:
         avg_improvement = np.mean(total_improvements)
         positive_improvements = sum(1 for imp in total_improvements if imp > 0)

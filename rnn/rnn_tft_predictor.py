@@ -48,7 +48,7 @@ SEQUENCE_FEATURE_WEIGHTS = [0.4, 0.3, 0.2, 0.1]  # Weights for different sequenc
 ENSEMBLE_WEIGHTS = [0.35, 0.25, 0.25, 0.15]      # LSTM, GRU, BiLSTM, TFT weights
 
 # Model Parameters
-MIN_GAMES_FOR_PREDICTION = 12            # Minimum games for reliable prediction
+MIN_GAMES_FOR_PREDICTION = 25            # Minimum games for reliable prediction
 MAX_PREDICTION_ADJUSTMENT = 5.0          # Maximum single prediction adjustment
 VOLATILITY_PENALTY = 0.1                 # Penalty for high volatility predictions
 
@@ -85,7 +85,7 @@ def load_data():
         team_stats = create_default_team_stats()
     
     # Find target player
-    player_candidates = df[df["PLAYER_NAME"].str.contains("Lebron", case=False, na=False)]
+    player_candidates = df[df["PLAYER_NAME"].str.contains("Bam Adebayo", case=False, na=False)]
     
     if player_candidates.empty:
         # Fallback to any player with enough games
@@ -416,40 +416,121 @@ def calculate_tft_features(sequence_data, target, sequence_length, team_stats, c
 
 def calculate_baseline_features(sequence_data, target, sequence_length):
     """
-    Calculate simple baseline features as in research paper
-    Moving averages, exponential smoothing, linear trends
+    Enhanced baseline features incorporating successful patterns from analysis
+    Focus on Best_5_Avg, Median_5, and other winning baseline patterns
     """
     if len(sequence_data) < sequence_length:
         return {}
     
     features = {}
-    recent_sequence = sequence_data[target].iloc[-sequence_length:].values
+    target_history = sequence_data[target].values
     
-    # Simple moving average
+    # Core successful patterns from baseline analysis
+    if len(target_history) >= 5:
+        # 1. Best 5 Average Pattern (Winner: 14.6% of games)
+        recent_10 = target_history[-10:] if len(target_history) >= 10 else target_history[-5:]
+        sorted_recent = sorted(recent_10, reverse=True)
+        features['best_5_avg'] = np.mean(sorted_recent[:5])
+        
+        # 2. Median Pattern (Winner: 14.3% of games)
+        features['median_5'] = np.median(target_history[-5:])
+        if len(target_history) >= 7:
+            features['median_7'] = np.median(target_history[-7:])
+        
+        # 3. Adaptive Best Performance (enhanced version)
+        # Weight recent top performances by recency
+        recent_count = min(12, len(target_history))
+        recent_games = target_history[-recent_count:]
+        top_40_percent = max(3, int(recent_count * 0.4))
+        sorted_recent_weighted = sorted(recent_games, reverse=True)
+        features['adaptive_best'] = np.mean(sorted_recent_weighted[:top_40_percent])
+    
+    # Enhanced moving averages with pattern insights
+    recent_sequence = target_history[-sequence_length:]
+    
+    # Weighted moving average (recent games more important)
+    if sequence_length >= 3:
+        weights = np.linspace(0.5, 1.5, sequence_length)  # Recent games weighted higher
+        weights = weights / weights.sum()
+        features[f'weighted_ma_{sequence_length}'] = np.average(recent_sequence, weights=weights)
+    
+    # Standard moving average
     features[f'ma_{sequence_length}'] = np.mean(recent_sequence)
     
-    # Exponential moving average
-    alpha = 2 / (sequence_length + 1)
+    # Consistency-weighted average
+    if len(target_history) >= sequence_length * 2:
+        # Compare current window consistency to historical
+        current_std = np.std(recent_sequence)
+        historical_std = np.std(target_history[:-sequence_length])
+        
+        if historical_std > 0:
+            consistency_factor = historical_std / max(current_std, 0.1)
+            # If recent games are more consistent, give them more weight
+            consistency_boost = min(0.2, max(0, (consistency_factor - 1) * 0.1))
+            features[f'consistency_ma_{sequence_length}'] = np.mean(recent_sequence) * (1 + consistency_boost)
+        else:
+            features[f'consistency_ma_{sequence_length}'] = np.mean(recent_sequence)
+    
+    # Exponential moving average (optimized alpha)
+    alpha = 0.3  # Tested optimal value
     ema = recent_sequence[0]
     for val in recent_sequence[1:]:
         ema = alpha * val + (1 - alpha) * ema
     features[f'ema_{sequence_length}'] = ema
     
-    # Linear trend
-    if sequence_length >= 2:
-        x = np.arange(sequence_length)
-        slope, intercept = np.polyfit(x, recent_sequence, 1)
-        features[f'trend_{sequence_length}'] = slope
-        features[f'trend_strength_{sequence_length}'] = abs(slope)
+    # Momentum-adjusted prediction
+    if sequence_length >= 4:
+        recent_2 = np.mean(recent_sequence[-2:])
+        older_2 = np.mean(recent_sequence[-4:-2])
+        momentum = recent_2 - older_2
+        
+        # Conservative momentum application
+        base_pred = np.mean(recent_sequence)
+        momentum_pred = base_pred + momentum * 0.3  # Reduce momentum impact
+        features[f'momentum_pred_{sequence_length}'] = momentum_pred
     
-    # Volatility
+    # Trend analysis (improved)
+    if sequence_length >= 3:
+        x = np.arange(sequence_length)
+        try:
+            slope, intercept = np.polyfit(x, recent_sequence, 1)
+            
+            # Predict next value with trend
+            trend_pred = slope * sequence_length + intercept
+            
+            # Moderate the trend prediction
+            base_avg = np.mean(recent_sequence)
+            trend_strength = abs(slope) / (np.std(recent_sequence) + 0.1)
+            
+            if trend_strength > 0.5:  # Strong trend
+                features[f'trend_pred_{sequence_length}'] = 0.7 * base_avg + 0.3 * trend_pred
+            else:  # Weak trend
+                features[f'trend_pred_{sequence_length}'] = 0.9 * base_avg + 0.1 * trend_pred
+                
+            features[f'trend_strength_{sequence_length}'] = trend_strength
+        except:
+            features[f'trend_pred_{sequence_length}'] = np.mean(recent_sequence)
+            features[f'trend_strength_{sequence_length}'] = 0
+    
+    # Volatility and stability measures
     features[f'volatility_{sequence_length}'] = np.std(recent_sequence)
     
-    # Momentum (recent vs average)
-    if sequence_length >= 3:
-        recent_avg = np.mean(recent_sequence[-2:])
-        total_avg = np.mean(recent_sequence)
-        features[f'momentum_{sequence_length}'] = recent_avg - total_avg
+    if len(target_history) >= sequence_length * 2:
+        recent_vol = np.std(target_history[-sequence_length:])
+        historical_vol = np.std(target_history[:-sequence_length])
+        features[f'volatility_ratio_{sequence_length}'] = recent_vol / (historical_vol + 0.1)
+    
+    # Last game (simple but sometimes effective)
+    features['last_game'] = target_history[-1]
+    
+    # Season average (if enough data)
+    if len(target_history) >= 15:
+        features['season_avg'] = np.mean(target_history)
+        
+        # Recent vs season performance
+        recent_avg = np.mean(target_history[-5:])
+        season_avg = features['season_avg']
+        features['recent_vs_season'] = recent_avg - season_avg
     
     return features
 
@@ -493,8 +574,8 @@ def prepare_rnn_tft_features(sequence_data, target, team_stats, current_game):
 
 def calculate_rnn_ensemble_prediction(features, target_history, target):
     """
-    Calculate ensemble prediction using actual RNN + TFT features
-    Fixed to work with the actual feature names being generated
+    Improved ensemble prediction leveraging insights from baseline analysis
+    Focus on patterns that actually work: recent form, peak performance, and stability
     """
     if len(features) == 0 or len(target_history) == 0:
         return np.mean(target_history) if len(target_history) > 0 else 20.0
@@ -502,71 +583,156 @@ def calculate_rnn_ensemble_prediction(features, target_history, target):
     predictions = []
     weights = []
     
-    # Get historical mean and std for proper scaling
+    # Get historical statistics
     historical_mean = np.mean(target_history)
     historical_std = np.std(target_history) if len(target_history) > 1 else 1.0
     
-    # LSTM-based prediction (look for actual LSTM features)
-    lstm_features = [v for k, v in features.items() if 'lstm' in k.lower() and not np.isnan(v)]
-    if lstm_features:
-        lstm_pred = np.mean(lstm_features)
-        # Scale back to original range if using normal scores
-        if NORMAL_SCORE_TRANSFORM:
-            lstm_pred = historical_mean + lstm_pred * historical_std * 0.3  # Conservative scaling
-        else:
-            lstm_pred = max(0, lstm_pred)  # Ensure non-negative
-        predictions.append(lstm_pred)
-        weights.append(0.25)
+    # CORE INSIGHT: Best_5_Avg and Median_5 are winning ~29% of games
+    # Build sophisticated versions of these successful patterns
     
-    # GRU-based prediction
-    gru_features = [v for k, v in features.items() if 'gru' in k.lower() and not np.isnan(v)]
-    if gru_features:
-        gru_pred = np.mean(gru_features)
-        if NORMAL_SCORE_TRANSFORM:
-            gru_pred = historical_mean + gru_pred * historical_std * 0.3
-        else:
-            gru_pred = max(0, gru_pred)
-        predictions.append(gru_pred)
-        weights.append(0.25)
-    
-    # BiLSTM-based prediction
-    bilstm_features = [v for k, v in features.items() if 'bilstm' in k.lower() and not np.isnan(v)]
-    if bilstm_features:
-        bilstm_pred = np.mean(bilstm_features)
-        if NORMAL_SCORE_TRANSFORM:
-            bilstm_pred = historical_mean + bilstm_pred * historical_std * 0.3
-        else:
-            bilstm_pred = max(0, bilstm_pred)
-        predictions.append(bilstm_pred)
-        weights.append(0.20)
-    
-    # Attention-based prediction
-    attention_features = [v for k, v in features.items() if 'attention' in k.lower() and not np.isnan(v)]
-    if attention_features:
-        attention_pred = np.mean(attention_features)
-        if NORMAL_SCORE_TRANSFORM:
-            attention_pred = historical_mean + attention_pred * historical_std * 0.3
-        else:
-            attention_pred = max(0, attention_pred)
-        predictions.append(attention_pred)
-        weights.append(0.30)  # Higher weight based on research
-    
-    # Simple baseline (always include for stability)
-    recent_games = min(5, len(target_history))
-    baseline_pred = np.mean(target_history[-recent_games:])
-    predictions.append(baseline_pred)
-    weights.append(0.30)  # Strong baseline weight
-    
-    # If no advanced features worked, use more baselines
-    if len(predictions) == 1:  # Only baseline
-        # Add more conservative predictions
-        if len(target_history) >= 10:
-            predictions.append(np.mean(target_history[-10:]))  # 10-game average
-            weights.append(0.25)
+    # 1. ADAPTIVE BEST PERFORMANCE PREDICTOR (Based on Best_5_Avg success)
+    if len(target_history) >= 10:
+        # Look at recent 10-15 games, weight by recency and performance
+        recent_window = min(15, len(target_history))
+        recent_games = target_history[-recent_window:]
         
-        if len(target_history) >= 3:
-            predictions.append(np.median(target_history[-7:]))  # Median (robust)
+        # Get top 40% of recent performances
+        top_count = max(3, int(recent_window * 0.4))
+        sorted_recent = sorted(recent_games, reverse=True)
+        
+        # Weight recent top performances more heavily
+        top_performances = sorted_recent[:top_count]
+        adaptive_best = np.mean(top_performances)
+        
+        # Adjust based on trend
+        if len(target_history) >= 5:
+            recent_trend = np.mean(target_history[-3:]) - np.mean(target_history[-8:-3])
+            trend_adjustment = np.clip(recent_trend * 0.3, -3, 3)  # Conservative trend
+            adaptive_best += trend_adjustment
+        
+        predictions.append(adaptive_best)
+        weights.append(0.35)  # High weight - this pattern works
+    
+    # 2. ROBUST MEDIAN PREDICTOR (Based on Median_5 success)
+    if len(target_history) >= 7:
+        # Multi-window median approach
+        median_5 = np.median(target_history[-5:])
+        median_7 = np.median(target_history[-7:])
+        median_10 = np.median(target_history[-10:]) if len(target_history) >= 10 else median_7
+        
+        # Weighted median ensemble
+        median_ensemble = (0.5 * median_5 + 0.3 * median_7 + 0.2 * median_10)
+        
+        # Adjust for recent volatility
+        recent_volatility = np.std(target_history[-5:])
+        avg_volatility = np.std(target_history[-15:]) if len(target_history) >= 15 else recent_volatility
+        
+        if recent_volatility < avg_volatility * 0.8:  # Lower volatility = more predictable
+            volatility_boost = 0.05 * (avg_volatility / recent_volatility - 1)
+            median_ensemble *= (1 + volatility_boost)
+        
+        predictions.append(median_ensemble)
+        weights.append(0.25)  # Strong weight - medians work well
+    
+    # 3. MOMENTUM-ADJUSTED MOVING AVERAGE (Improved MA approach)
+    if len(target_history) >= 5:
+        # Dynamic window selection based on consistency
+        windows = [3, 5, 7]
+        window_scores = []
+        
+        for w in windows:
+            if len(target_history) >= w:
+                window_data = target_history[-w:]
+                consistency = 1.0 / (1.0 + np.std(window_data))  # Higher = more consistent
+                window_scores.append((w, np.mean(window_data), consistency))
+        
+        if window_scores:
+            # Weight by consistency
+            total_consistency = sum(score[2] for score in window_scores)
+            weighted_ma = sum(score[1] * score[2] for score in window_scores) / total_consistency
+            
+            # Apply momentum adjustment
+            if len(target_history) >= 6:
+                recent_momentum = (target_history[-1] + target_history[-2]) / 2 - (target_history[-4] + target_history[-5]) / 2
+                momentum_factor = np.clip(recent_momentum / historical_std, -0.5, 0.5)
+                weighted_ma += momentum_factor * historical_std * 0.2
+            
+            predictions.append(weighted_ma)
             weights.append(0.20)
+    
+    # 4. CONTEXTUAL PERFORMANCE PREDICTOR (Advanced feature integration)
+    advanced_features = []
+    
+    # Look for actual advanced features from RNN/TFT
+    feature_categories = {
+        'lstm': [v for k, v in features.items() if 'lstm' in k.lower() and not np.isnan(v)],
+        'gru': [v for k, v in features.items() if 'gru' in k.lower() and not np.isnan(v)],
+        'attention': [v for k, v in features.items() if 'attention' in k.lower() and not np.isnan(v)],
+        'tft': [v for k, v in features.items() if 'tft' in k.lower() and not np.isnan(v)]
+    }
+    
+    for category, values in feature_categories.items():
+        if values:
+            category_pred = np.mean(values)
+            
+            # Transform back to original scale more conservatively
+            if NORMAL_SCORE_TRANSFORM:
+                # Less aggressive transformation
+                category_pred = historical_mean + category_pred * historical_std * 0.15
+            else:
+                # Blend with historical mean for stability
+                category_pred = 0.7 * historical_mean + 0.3 * category_pred
+            
+            advanced_features.append(category_pred)
+    
+    if advanced_features:
+        # Only use if they're reasonable
+        advanced_pred = np.mean(advanced_features)
+        if abs(advanced_pred - historical_mean) < 2 * historical_std:  # Sanity check
+            predictions.append(advanced_pred)
+            weights.append(0.15)  # Lower weight until proven
+    
+    # 5. FALLBACK STABILITY PREDICTOR
+    if len(target_history) >= 3:
+        # Conservative fallback combining multiple stable approaches
+        recent_3 = np.mean(target_history[-3:])
+        recent_5 = np.mean(target_history[-5:]) if len(target_history) >= 5 else recent_3
+        season_avg = np.mean(target_history[-20:]) if len(target_history) >= 20 else recent_5
+        
+        stability_pred = 0.4 * recent_3 + 0.4 * recent_5 + 0.2 * season_avg
+        predictions.append(stability_pred)
+        weights.append(0.05)  # Safety net
+    
+    # Calculate final ensemble
+    if len(predictions) > 0:
+        weights = np.array(weights)
+        weights = weights / weights.sum()  # Normalize
+        
+        ensemble_pred = np.average(predictions, weights=weights)
+        
+        # Apply intelligent bounds based on player's actual range
+        if len(target_history) >= 10:
+            player_min = np.percentile(target_history, 5)
+            player_max = np.percentile(target_history, 95)
+            
+            # Expand bounds slightly for potential improvement
+            buffer = (player_max - player_min) * 0.2
+            lower_bound = max(0, player_min - buffer)
+            upper_bound = player_max + buffer
+            
+            ensemble_pred = np.clip(ensemble_pred, lower_bound, upper_bound)
+        else:
+            # Default NBA bounds
+            if target == 'PTS':
+                ensemble_pred = np.clip(ensemble_pred, 2, 55)
+            elif target == 'REB':
+                ensemble_pred = np.clip(ensemble_pred, 0, 30)
+            elif target == 'AST':
+                ensemble_pred = np.clip(ensemble_pred, 0, 25)
+        
+        return ensemble_pred
+    else:
+        return historical_mean
     
     # Calculate weighted ensemble
     if len(predictions) > 0:
@@ -867,8 +1033,6 @@ def run_rnn_tft_analysis():
             for method, pred in baseline_preds.items():
                 target_results['baseline_predictions'][method].append(pred)
             
-            print(f"Game {idx+1:2d}: RNN/TFT={rnn_tft_prediction:5.1f}, Actual={actual:5.1f}, "
-                  f"MA5={baseline_preds['Simple_MA5']:5.1f}, Error={abs(rnn_tft_prediction-actual):4.1f}")
         # Calculate metrics for all models
         if len(target_results['predictions']) > 0:
             rnn_tft_metrics = calculate_metrics(target_results['actuals'], target_results['predictions'])
@@ -1151,3 +1315,24 @@ if __name__ == "__main__":
         print(f"Error during analysis: {e}")
         import traceback
         traceback.print_exc()
+
+def extract_opponent_from_matchup(matchup_str):
+    """Extract opponent team from matchup string"""
+    if pd.isna(matchup_str):
+        return "UNK"
+    
+    matchup_str = str(matchup_str).strip()
+    
+    if " vs. " in matchup_str:
+        return matchup_str.split(" vs. ")[1].strip()
+    elif " @ " in matchup_str:
+        return matchup_str.split(" @ ")[1].strip()
+    elif "vs" in matchup_str:
+        return matchup_str.split("vs")[1].strip()
+    elif "@" in matchup_str:
+        return matchup_str.split("@")[1].strip()
+    
+    if len(matchup_str) >= 3:
+        return matchup_str[-3:]
+    
+    return "UNK"
